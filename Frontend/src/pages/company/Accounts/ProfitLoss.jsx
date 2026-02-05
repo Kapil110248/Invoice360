@@ -1,26 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaChartLine, FaArrowTrendDown, FaArrowTrendUp, FaMoneyBillWave, FaLandmark, FaCheckDouble } from 'react-icons/fa6';
+import axiosInstance from '../../../api/axiosInstance';
+import toast from 'react-hot-toast';
 import './Accounts.css';
 
 const ProfitLossAccount = () => {
-  const [year, setYear] = useState('2025');
-  const [month, setMonth] = useState('August');
+  const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [month, setMonth] = useState(''); // Not used by backend, but kept for potential future use
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
 
-  // Dummy Data
-  const summaryData = {
-    revenue: 'R8,50,000',
-    expenses: 'R6,20,000',
-    grossProfit: 'R2,30,000',
-    netProfit: 'R1,80,000',
+  // Fetch Data from API
+  useEffect(() => {
+    const fetchProfitLossData = async () => {
+      try {
+        setLoading(true);
+        const response = await axiosInstance.get('/reports/profit-loss', {
+          params: { year: parseInt(year) }
+        });
+        
+        if (response.data.success) {
+          setData(response.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching P&L data:', error);
+        toast.error('Failed to load Profit & Loss data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfitLossData();
+  }, [year]);
+
+  // Format currency
+  const formatCurrency = (amount) => {
+    return `R${parseFloat(amount || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const salesData = [
-    { label: 'Revenue from Sales', amount: 'R7,65,000', isTotal: false },
-    { label: 'Other Income', amount: 'R85,000', isTotal: false },
-    { label: 'Operating Expenses', amount: 'R4,34,000', isTotal: false },
-    { label: 'Administrative Expenses', amount: 'R1,86,000', isTotal: false },
-    { label: 'Net Profit', amount: 'R1,80,000', isTotal: true, icon: true },
-  ];
+  // Prepare summary data
+  const summaryData = data ? {
+    revenue: formatCurrency(data.summary.totalIncome),
+    expenses: formatCurrency(data.summary.totalExpense),
+    grossProfit: formatCurrency(data.summary.totalIncome - data.summary.totalExpense), // Simplified
+    netProfit: formatCurrency(data.summary.netProfit),
+  } : {
+    revenue: 'R0.00',
+    expenses: 'R0.00',
+    grossProfit: 'R0.00',
+    netProfit: 'R0.00'
+  };
+
+  // Prepare detailed breakdown
+  const salesData = data ? [
+    ...data.incomeCategories.map(cat => ({ label: cat.name, amount: formatCurrency(cat.value), isTotal: false })),
+    ...data.expenseCategories.map(cat => ({ label: cat.name, amount: formatCurrency(cat.value), isTotal: false })),
+    { label: 'Net Profit', amount: formatCurrency(data.summary.netProfit), isTotal: true, icon: true },
+  ] : [];
 
   return (
     <div className="ac-container">
@@ -28,7 +64,7 @@ const ProfitLossAccount = () => {
       <div className="ac-pl-header-card">
         <div className="ac-pl-header-left">
           <h2><FaChartLine /> Profit & Loss Statement</h2>
-          <p>January 1, {year} - {month} 20, {year}</p>
+          <p>Financial Year {year}</p>
         </div>
         <div className="ac-pl-filters">
           <div className="ac-pl-filter-group">
@@ -41,27 +77,7 @@ const ProfitLossAccount = () => {
               <option value="2023">2023</option>
               <option value="2024">2024</option>
               <option value="2025">2025</option>
-            </select>
-          </div>
-          <div className="ac-pl-filter-group">
-            <span className="ac-pl-filter-label">Month:</span>
-            <select
-              className="ac-pl-select"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-            >
-              <option value="January">January</option>
-              <option value="February">February</option>
-              <option value="March">March</option>
-              <option value="April">April</option>
-              <option value="May">May</option>
-              <option value="June">June</option>
-              <option value="July">July</option>
-              <option value="August">August</option>
-              <option value="September">September</option>
-              <option value="October">October</option>
-              <option value="November">November</option>
-              <option value="December">December</option>
+              <option value="2026">2026</option>
             </select>
           </div>
         </div>
@@ -109,21 +125,31 @@ const ProfitLossAccount = () => {
       {/* Detailed Summary List */}
       <div className="ac-pl-summary-section">
         <div className="ac-pl-section-title">Summary</div>
-        <div className="ac-pl-list">
-          {salesData.map((item, index) => (
-            <div
-              key={index}
-              className={`ac-pl-list-item ${item.isTotal ? 'highlight' : ''}`}
-            >
-              <div className="ac-pl-icon-box">
-                {item.icon && <FaCheckDouble />} {item.label}
+        {loading ? (
+          <div style={{textAlign: 'center', padding: '40px', color: 'var(--text-muted)'}}>
+            Loading profit & loss data...
+          </div>
+        ) : salesData.length > 0 ? (
+          <div className="ac-pl-list">
+            {salesData.map((item, index) => (
+              <div
+                key={index}
+                className={`ac-pl-list-item ${item.isTotal ? 'highlight' : ''}`}
+              >
+                <div className="ac-pl-icon-box">
+                  {item.icon && <FaCheckDouble />} {item.label}
+                </div>
+                <div className="ac-pl-amount">
+                  {item.amount}
+                </div>
               </div>
-              <div className="ac-pl-amount">
-                {item.amount}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{textAlign: 'center', padding: '40px', color: 'var(--text-muted)'}}>
+            No data available for this period
+          </div>
+        )}
       </div>
     </div>
   );

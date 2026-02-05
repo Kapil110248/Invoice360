@@ -1,44 +1,93 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaBriefcase, FaArrowLeft, FaChartPie, FaMoneyCheckDollar, FaBuildingColumns, FaBoxesStacked, FaFileInvoiceDollar, FaScaleBalanced } from 'react-icons/fa6';
 import { BsCalendar2Date } from 'react-icons/bs';
 import { FiTrash2 } from 'react-icons/fi';
+import axiosInstance from '../../../api/axiosInstance';
+import toast from 'react-hot-toast';
 import './Accounts.css';
 
 const BalanceSheet = () => {
   const [view, setView] = useState('main'); // 'main', 'assets', 'liabilities'
+  const [loading, setLoading] = useState(true);
+  const [balanceSheetData, setBalanceSheetData] = useState(null);
+  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- Main View Data ---
-  const assetsData = {
-    current: [
-      { label: 'Cash', amount: 'R75,000' },
-      { label: 'Bank', amount: 'R245,000' },
-      { label: 'Stock', amount: 'R320,000' },
-      { label: 'Accounts Receivable', amount: 'R185,000' },
-    ],
-    fixed: [
-      { label: 'Land & Building', amount: 'R1,250,000' },
-      { label: 'Plant & Machinery', amount: 'R875,000' },
-      { label: 'Furniture & Fixtures', amount: 'R150,000' },
-    ]
+  // Fetch Balance Sheet Data
+  useEffect(() => {
+    const fetchBalanceSheet = async () => {
+      try {
+        setLoading(true);
+        const response = await axiosInstance.get('/reports/balance-sheet', {
+          params: { asOfDate }
+        });
+        
+        if (response.data.success) {
+          setBalanceSheetData(response.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching Balance Sheet:', error);
+        toast.error('Failed to load Balance Sheet data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBalanceSheet();
+  }, [asOfDate]);
+
+  // Format currency
+  const formatCurrency = (amount) => {
+    return `R${parseFloat(amount || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const liabilitiesData = {
-    current: [
-      { label: 'Accounts Payable', amount: 'R235,000' },
-      { label: 'Short-term Loans', amount: 'R125,000' },
-      { label: 'Outstanding Expenses', amount: 'R45,000' },
-    ],
-    longTerm: [
-      { label: 'Term Loan', amount: 'R750,000' },
-      { label: 'Mortgage Loan', amount: 'R425,000' },
-    ],
-    capital: [
-      { label: 'Capital', amount: 'R1,000,000' },
-      { label: 'Retained Earnings', amount: 'R520,000' },
-    ]
+  // Prepare data for rendering
+  const assetsData = balanceSheetData ? {
+    current: balanceSheetData.assets.current.map(item => ({ 
+      label: item.name, 
+      amount: formatCurrency(item.value) 
+    })),
+    fixed: balanceSheetData.assets.fixed.map(item => ({ 
+      label: item.name, 
+      amount: formatCurrency(item.value) 
+    }))
+  } : { current: [], fixed: [] };
+
+  const liabilitiesData = balanceSheetData ? {
+    current: balanceSheetData.liabilities.current.map(item => ({ 
+      label: item.name, 
+      amount: formatCurrency(item.value) 
+    })),
+    longTerm: balanceSheetData.liabilities.longTerm.map(item => ({ 
+      label: item.name, 
+      amount: formatCurrency(item.value) 
+    })),
+    capital: balanceSheetData.equity.items.map(item => ({ 
+      label: item.name, 
+      amount: formatCurrency(item.value) 
+    }))
+  } : { current: [], longTerm: [], capital: [] };
+
+  const totals = balanceSheetData ? {
+    currentAssets: formatCurrency(balanceSheetData.assets.current.reduce((sum, item) => sum + item.value, 0)),
+    fixedAssets: formatCurrency(balanceSheetData.assets.fixed.reduce((sum, item) => sum + item.value, 0)),
+    totalAssets: formatCurrency(balanceSheetData.assets.total),
+    currentLiabilities: formatCurrency(balanceSheetData.liabilities.current.reduce((sum, item) => sum + item.value, 0)),
+    longTermLiabilities: formatCurrency(balanceSheetData.liabilities.longTerm.reduce((sum, item) => sum + item.value, 0)),
+    totalLiabilities: formatCurrency(balanceSheetData.liabilities.total),
+    totalCapital: formatCurrency(balanceSheetData.equity.total),
+    totalLiabilitiesCapital: formatCurrency(balanceSheetData.liabilities.total + balanceSheetData.equity.total)
+  } : {
+    currentAssets: 'R0.00',
+    fixedAssets: 'R0.00',
+    totalAssets: 'R0.00',
+    currentLiabilities: 'R0.00',
+    longTermLiabilities: 'R0.00',
+    totalLiabilities: 'R0.00',
+    totalCapital: 'R0.00',
+    totalLiabilitiesCapital: 'R0.00'
   };
 
-  // --- Detailed View Data ---
+  // --- Detailed View Data (Keep static for now, can be enhanced later) ---
 
   // Assets Details
   const cashInflows = [
@@ -90,96 +139,102 @@ const BalanceSheet = () => {
           <FaBriefcase style={{ fontSize: '28px', color: '#475569' }} />
           <h2 style={{ margin: 0 }}>Balance Sheet</h2>
         </div>
-        <p>As on 8 July 2025</p>
+        <p>As on {new Date(asOfDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
       </div>
 
-      <div className="ac-bs-split-container">
-        {/* Assets Side */}
-        <div className="ac-bs-card">
-          <div className="ac-bs-card-header">
-            <div className="ac-bs-card-title">ASSETS</div>
-            <button className="ac-btn-view-details" onClick={() => setView('assets')}>View Asset Details</button>
-          </div>
-
-          <div className="ac-bs-section-title">Current Assets</div>
-          {assetsData.current.map((item, i) => (
-            <div className="ac-bs-row" key={i}>
-              <span>{item.label}</span>
-              <strong>{item.amount}</strong>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
+          Loading balance sheet data...
+        </div>
+      ) : (
+        <div className="ac-bs-split-container">
+          {/* Assets Side */}
+          <div className="ac-bs-card">
+            <div className="ac-bs-card-header">
+              <div className="ac-bs-card-title">ASSETS</div>
+              <button className="ac-btn-view-details" onClick={() => setView('assets')}>View Asset Details</button>
             </div>
-          ))}
-          <div className="ac-bs-total-row">
-            <span>Total Current Assets</span>
-            <span>R825,000</span>
-          </div>
 
-          <div className="ac-bs-section-title">Fixed Assets</div>
-          {assetsData.fixed.map((item, i) => (
-            <div className="ac-bs-row" key={i}>
-              <span>{item.label}</span>
-              <strong>{item.amount}</strong>
+            <div className="ac-bs-section-title">Current Assets</div>
+            {assetsData.current.length > 0 ? assetsData.current.map((item, i) => (
+              <div className="ac-bs-row" key={i}>
+                <span>{item.label}</span>
+                <strong>{item.amount}</strong>
+              </div>
+            )) : <div style={{textAlign: 'center', padding: '10px', color: 'var(--text-muted)'}}>No current assets</div>}
+            <div className="ac-bs-total-row">
+              <span>Total Current Assets</span>
+              <span>{totals.currentAssets}</span>
             </div>
-          ))}
-          <div className="ac-bs-total-row">
-            <span>Total Fixed Assets</span>
-            <span>R2,275,000</span>
+
+            <div className="ac-bs-section-title">Fixed Assets</div>
+            {assetsData.fixed.length > 0 ? assetsData.fixed.map((item, i) => (
+              <div className="ac-bs-row" key={i}>
+                <span>{item.label}</span>
+                <strong>{item.amount}</strong>
+              </div>
+            )) : <div style={{textAlign: 'center', padding: '10px', color: 'var(--text-muted)'}}>No fixed assets</div>}
+            <div className="ac-bs-total-row">
+              <span>Total Fixed Assets</span>
+              <span>{totals.fixedAssets}</span>
+            </div>
+
+            <div className="ac-bs-grand-total">
+              <span>Total Assets</span>
+              <span>{totals.totalAssets}</span>
+            </div>
           </div>
 
-          <div className="ac-bs-grand-total">
-            <span>Total Assets</span>
-            <span>R3,100,000</span>
+          {/* Liabilities Side */}
+          <div className="ac-bs-card">
+            <div className="ac-bs-card-header">
+              <div className="ac-bs-card-title">LIABILITIES & CAPITAL</div>
+              <button className="ac-btn-view-details" onClick={() => setView('liabilities')}>View Liability Details</button>
+            </div>
+
+            <div className="ac-bs-section-title">Current Liabilities</div>
+            {liabilitiesData.current.length > 0 ? liabilitiesData.current.map((item, i) => (
+              <div className="ac-bs-row" key={i}>
+                <span>{item.label}</span>
+                <strong>{item.amount}</strong>
+              </div>
+            )) : <div style={{textAlign: 'center', padding: '10px', color: 'var(--text-muted)'}}>No current liabilities</div>}
+            <div className="ac-bs-total-row">
+              <span>Total Current Liabilities</span>
+              <span>{totals.currentLiabilities}</span>
+            </div>
+
+            <div className="ac-bs-section-title">Long-term Liabilities</div>
+            {liabilitiesData.longTerm.length > 0 ? liabilitiesData.longTerm.map((item, i) => (
+              <div className="ac-bs-row" key={i}>
+                <span>{item.label}</span>
+                <strong>{item.amount}</strong>
+              </div>
+            )) : <div style={{textAlign: 'center', padding: '10px', color: 'var(--text-muted)'}}>No long-term liabilities</div>}
+            <div className="ac-bs-total-row">
+              <span>Total Long-term Liabilities</span>
+              <span>{totals.longTermLiabilities}</span>
+            </div>
+
+            <div className="ac-bs-section-title">Owner's Capital</div>
+            {liabilitiesData.capital.length > 0 ? liabilitiesData.capital.map((item, i) => (
+              <div className="ac-bs-row" key={i}>
+                <span>{item.label}</span>
+                <strong>{item.amount}</strong>
+              </div>
+            )) : <div style={{textAlign: 'center', padding: '10px', color: 'var(--text-muted)'}}>No capital items</div>}
+            <div className="ac-bs-total-row">
+              <span>Total Owner's Capital</span>
+              <span>{totals.totalCapital}</span>
+            </div>
+
+            <div className="ac-bs-grand-total">
+              <span>Total Liabilities & Capital</span>
+              <span>{totals.totalLiabilitiesCapital}</span>
+            </div>
           </div>
         </div>
-
-        {/* Liabilities Side */}
-        <div className="ac-bs-card">
-          <div className="ac-bs-card-header">
-            <div className="ac-bs-card-title">LIABILITIES & CAPITAL</div>
-            <button className="ac-btn-view-details" onClick={() => setView('liabilities')}>View Liability Details</button>
-          </div>
-
-          <div className="ac-bs-section-title">Current Liabilities</div>
-          {liabilitiesData.current.map((item, i) => (
-            <div className="ac-bs-row" key={i}>
-              <span>{item.label}</span>
-              <strong>{item.amount}</strong>
-            </div>
-          ))}
-          <div className="ac-bs-total-row">
-            <span>Total Current Liabilities</span>
-            <span>R405,000</span>
-          </div>
-
-          <div className="ac-bs-section-title">Long-term Liabilities</div>
-          {liabilitiesData.longTerm.map((item, i) => (
-            <div className="ac-bs-row" key={i}>
-              <span>{item.label}</span>
-              <strong>{item.amount}</strong>
-            </div>
-          ))}
-          <div className="ac-bs-total-row">
-            <span>Total Long-term Liabilities</span>
-            <span>R1,175,000</span>
-          </div>
-
-          <div className="ac-bs-section-title">Owner's Capital</div>
-          {liabilitiesData.capital.map((item, i) => (
-            <div className="ac-bs-row" key={i}>
-              <span>{item.label}</span>
-              <strong>{item.amount}</strong>
-            </div>
-          ))}
-          <div className="ac-bs-total-row">
-            <span>Total Owner's Capital</span>
-            <span>R1,520,000</span>
-          </div>
-
-          <div className="ac-bs-grand-total">
-            <span>Total Liabilities & Capital</span>
-            <span>R3,100,000</span>
-          </div>
-        </div>
-      </div>
+      )}
 
       <div className="ac-bs-footer-info">
         💡 The Balance Sheet represents your business's financial position — <strong>Assets = Liabilities + Capital.</strong>

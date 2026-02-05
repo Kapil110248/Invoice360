@@ -11,6 +11,7 @@ router.get('/inventory-summary', authenticateToken, reportController.getInventor
 router.get('/balance-sheet', authenticateToken, reportController.getBalanceSheet);
 // Cash Flow
 router.get('/cash-flow', authenticateToken, reportController.getCashFlowStatement);
+router.get('/cash-flow-transactions', authenticateToken, reportController.getCashFlowTransactions);
 router.get('/profit-loss', authenticateToken, reportController.getProfitLoss);
 router.get('/vat', authenticateToken, reportController.getVatReport);
 router.get('/daybook', authenticateToken, reportController.getDayBook);

@@ -21,18 +21,37 @@ cloudinary.config({
     api_secret: isConfigured ? api_secret : 'placeholder',
 });
 
-// Storage fallback if not configured
+// Storage for company logos
 const storage = isConfigured ? new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: 'company_logos',
         allowed_formats: ['jpg', 'png', 'jpeg'],
     },
-}) : multer.memoryStorage(); // Fallback to memory if not configured
+}) : multer.memoryStorage();
+
+// Storage for customers (more flexible formats)
+const customerStorage = isConfigured ? new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'customers',
+        allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'docx', 'xlsx', 'txt'],
+    },
+}) : multer.memoryStorage();
 
 const upload = multer({
     storage: storage,
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-module.exports = { cloudinary, upload, isCloudinaryConfigured: isConfigured };
+const customerUpload = multer({
+    storage: customerStorage,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
+
+module.exports = { 
+    cloudinary, 
+    upload, 
+    customerUpload,
+    isCloudinaryConfigured: isConfigured 
+};

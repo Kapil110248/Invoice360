@@ -1,29 +1,110 @@
-import React, { useState } from 'react';
-import { FaFilePdf, FaFileExcel, FaCircleInfo } from 'react-icons/fa6';
+import React, { useState, useEffect } from 'react';
+import { FaFilePdf, FaFileExcel } from 'react-icons/fa6';
+import axiosInstance from '../../../api/axiosInstance';
+import toast from 'react-hot-toast';
+import GetCompanyId from '../../../api/GetCompanyId';
+import customerService from '../../../services/customerService';
+import vendorService from '../../../services/vendorService';
 import './Accounts.css';
 
 const TaxReportAccount = () => {
   const [activeTab, setActiveTab] = useState('purchase'); // 'purchase' or 'sales'
-  const [dateRange, setDateRange] = useState('30/01/2026 - 30/01/2026');
-  const [vendor, setVendor] = useState('All');
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0]
+  });
+  const [partyId, setPartyId] = useState('All');
   const [paymentMethod, setPaymentMethod] = useState('All');
+  const [parties, setParties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [reportData, setReportData] = useState([]);
 
-  // Dummy Data
-  const purchaseData = [
-    { id: 1, ref: '#4237022', vendor: 'A-Z Store', date: '06 Nov 2024', amount: 'R700', method: 'Cash', discount: 'R0', tax: 'R35' },
-    { id: 2, ref: '#4237300', vendor: 'Apex Computers', date: '24 Dec 2024', amount: 'R200', method: 'Stripe', discount: 'R0', tax: 'R10' },
-    { id: 3, ref: '#7590321', vendor: 'Sigma Chairs', date: '20 Sep 2024', amount: 'R450', method: 'Stripe', discount: 'R20', tax: 'R22.5' },
-    { id: 4, ref: '#7590325', vendor: 'Beats Headphones', date: '10 Dec 2024', amount: 'R50', method: 'Paypal', discount: 'R0', tax: 'R2.5' },
-    { id: 5, ref: '#7590365', vendor: 'Aesthetic Bags', date: '14 Oct 2024', amount: 'R1200', method: 'Paypal', discount: 'R50', tax: 'R60' },
-    { id: 6, ref: '#8744439', vendor: 'Hatimi Hardwares', date: '25 Oct 2024', amount: 'R1000', method: 'Cash', discount: 'R0', tax: 'R50' },
-  ];
+  const companyId = GetCompanyId();
 
-  const salesData = [
-    { id: 1, ref: '#SL-001', vendor: 'John Doe', date: '01 Jan 2025', amount: 'R1500', method: 'Cash', discount: 'R0', tax: 'R75' },
-    { id: 2, ref: '#SL-002', vendor: 'Jane Smith', date: '05 Jan 2025', amount: 'R3500', method: 'Bank', discount: 'R100', tax: 'R175' },
-  ];
+  // Fetch Customers/Vendors
+  useEffect(() => {
+    const fetchParties = async () => {
+      try {
+        if (activeTab === 'sales') {
+          const res = await customerService.getAllCustomers(companyId);
+          setParties(res.data || []);
+        } else {
+          const res = await vendorService.getAllVendors(companyId);
+          setParties(res.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching parties:', error);
+      }
+    };
+    fetchParties();
+    setPartyId('All');
+  }, [activeTab, companyId]);
 
-  const currentData = activeTab === 'purchase' ? purchaseData : salesData;
+  // Fetch Report Data
+  useEffect(() => {
+    fetchTaxReport();
+  }, [activeTab]);
+
+  const fetchTaxReport = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get('/reports/tax', {
+        params: {
+          companyId,
+          mode: 'detailed',
+          type: activeTab,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
+          partyId: partyId === 'All' ? null : partyId,
+          paymentMethod: paymentMethod === 'All' ? null : paymentMethod
+        }
+      });
+
+      if (response.data.success) {
+        setReportData(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching Tax report:', error);
+      toast.error('Failed to load Tax report data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
+
+  const handleExportExcel = () => {
+    if (reportData.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const headers = ['REFERENCE', activeTab === 'purchase' ? 'VENDOR' : 'CUSTOMER', 'DATE', 'AMOUNT', 'PAYMENT METHOD', 'DISCOUNT', 'TAX AMOUNT'];
+    const csvContent = [
+      headers.join(','),
+      ...reportData.map(row => [
+        `"${row.ref}"`,
+        `"${row.party}"`,
+        `"${new Date(row.date).toLocaleDateString()}"`,
+        `"${row.amount}"`,
+        `"${row.method}"`,
+        `"${row.discount}"`,
+        `"${row.tax}"`
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${activeTab === 'purchase' ? 'Purchase' : 'Sales'}_Tax_Report.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="ac-container">
@@ -51,42 +132,76 @@ const TaxReportAccount = () => {
             {activeTab === 'purchase' ? 'Purchase Tax Report' : 'Sales Tax Report'}
           </h3>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="ac-btn-icon-red" style={{ background: '#ffe4e6', color: '#e11d48', width: '32px', height: '32px' }}><FaFilePdf /></button>
-            <button className="ac-btn-icon-blue" style={{ background: '#dcfce7', color: '#16a34a', width: '32px', height: '32px' }}><FaFileExcel /></button>
+            <button 
+              className="ac-btn-icon-red" 
+              onClick={handleExportPDF}
+              style={{ background: '#ffe4e6', color: '#e11d48', width: '32px', height: '32px' }}
+              title="Export to PDF"
+            >
+              <FaFilePdf />
+            </button>
+            <button 
+              className="ac-btn-icon-blue" 
+              onClick={handleExportExcel}
+              style={{ background: '#dcfce7', color: '#16a34a', width: '32px', height: '32px' }}
+              title="Export to Excel"
+            >
+              <FaFileExcel />
+            </button>
           </div>
         </div>
 
         {/* Filters */}
         <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px', display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <label className="ac-form-label">Choose Date</label>
-            <div style={{ position: 'relative' }}>
-              <input type="text" className="ac-form-input" value={dateRange} onChange={e => setDateRange(e.target.value)} />
-              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>x</span>
-            </div>
+          <div style={{ flex: '1 1 150px' }}>
+            <label className="ac-form-label">Start Date</label>
+            <input 
+              type="date" 
+              className="ac-form-input" 
+              value={dateRange.startDate} 
+              onChange={e => setDateRange({ ...dateRange, startDate: e.target.value })} 
+            />
           </div>
 
-          <div style={{ flex: 1, minWidth: '200px' }}>
+          <div style={{ flex: '1 1 150px' }}>
+            <label className="ac-form-label">End Date</label>
+            <input 
+              type="date" 
+              className="ac-form-input" 
+              value={dateRange.endDate} 
+              onChange={e => setDateRange({ ...dateRange, endDate: e.target.value })} 
+            />
+          </div>
+
+          <div style={{ flex: '1 1 200px' }}>
             <label className="ac-form-label">{activeTab === 'purchase' ? 'Vendor' : 'Customer'}</label>
-            <select className="ac-form-input" value={vendor} onChange={e => setVendor(e.target.value)}>
-              <option value="All">All</option>
-              <option>A-Z Store</option>
-              <option>Apex Computers</option>
+            <select className="ac-form-input" value={partyId} onChange={e => setPartyId(e.target.value)}>
+              <option value="All">All {activeTab === 'purchase' ? 'Vendors' : 'Customers'}</option>
+              {parties.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
           </div>
 
-          <div style={{ flex: 1, minWidth: '200px' }}>
+          <div style={{ flex: '1 1 180px' }}>
             <label className="ac-form-label">Payment Method</label>
             <select className="ac-form-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-              <option value="All">All</option>
-              <option>Cash</option>
-              <option>Stripe</option>
-              <option>Paypal</option>
+              <option value="All">All Methods</option>
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Stripe">Stripe</option>
+              <option value="PayPal">PayPal</option>
+              <option value="Credit">Credit</option>
             </select>
           </div>
 
-          <button className="ac-btn-add" style={{ height: '42px', minWidth: '160px', justifyContent: 'center', backgroundColor: 'var(--primary)' }}>
-            Generate Report
+          <button 
+            className="ac-btn-add" 
+            onClick={fetchTaxReport}
+            disabled={loading}
+            style={{ height: '42px', minWidth: '160px', justifyContent: 'center', backgroundColor: 'var(--primary)' }}
+          >
+            {loading ? 'Generating...' : 'Generate Report'}
           </button>
         </div>
 
@@ -95,41 +210,51 @@ const TaxReportAccount = () => {
           <table className="ac-table">
             <thead>
               <tr>
-                <th style={{ width: '12%' }}>REFERENCE</th>
-                <th style={{ width: '20%' }}>{activeTab === 'purchase' ? 'VENDOR' : 'CUSTOMER'}</th>
+                <th style={{ width: '15%' }}>REFERENCE</th>
+                <th style={{ width: '25%' }}>{activeTab === 'purchase' ? 'VENDOR' : 'CUSTOMER'}</th>
                 <th style={{ width: '12%' }}>DATE</th>
-                <th style={{ width: '10%' }}>AMOUNT</th>
+                <th style={{ width: '12%' }}>AMOUNT</th>
                 <th style={{ width: '13%' }}>PAYMENT METHOD</th>
                 <th style={{ width: '10%' }}>DISCOUNT</th>
-                <th style={{ width: '10%' }}>TAX AMOUNT</th>
+                <th style={{ width: '13%' }}>TAX AMOUNT</th>
               </tr>
             </thead>
             <tbody>
-              {currentData.map(row => (
-                <tr key={row.id}>
-                  <td style={{ fontWeight: '600', color: '#64748b' }}>{row.ref}</td>
-                  <td style={{ fontWeight: '600', color: 'var(--primary)' }}>{row.vendor}</td>
-                  <td>{row.date}</td>
-                  <td style={{ fontWeight: '600' }}>{row.amount}</td>
-                  <td>{row.method}</td>
-                  <td>{row.discount}</td>
-                  <td style={{ fontWeight: '600' }}>{row.tax}</td>
+              {loading ? (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading report data...</td>
                 </tr>
-              ))}
+              ) : reportData.length > 0 ? (
+                reportData.map(row => (
+                  <tr key={`${row.ref}-${row.id}`}>
+                    <td style={{ fontWeight: '600', color: '#64748b' }}>{row.ref}</td>
+                    <td style={{ fontWeight: '600', color: 'var(--primary)' }}>{row.party}</td>
+                    <td>{new Date(row.date).toLocaleDateString()}</td>
+                    <td style={{ fontWeight: '600' }}>R{parseFloat(row.amount).toFixed(2)}</td>
+                    <td>
+                      <span className={`ac-badge ac-badge-${row.method.toLowerCase()}`}>
+                        {row.method}
+                      </span>
+                    </td>
+                    <td>R{parseFloat(row.discount).toFixed(2)}</td>
+                    <td style={{ fontWeight: '700', color: '#0f172a' }}>R{parseFloat(row.tax).toFixed(2)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No tax transactions found.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="ac-pagination">
-          <div className="ac-pagination-info">Showing 1 to {currentData.length} of {currentData.length} results</div>
-          <div className="ac-pagination-controls">
-            <button className="ac-page-btn" disabled>«</button>
-            <button className="ac-page-btn active">1</button>
-            <button className="ac-page-btn">2</button>
-            <button className="ac-page-btn">»</button>
+        {/* Pagination Info */}
+        {!loading && reportData.length > 0 && (
+          <div className="ac-pagination">
+            <div className="ac-pagination-info">Showing {reportData.length} results</div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

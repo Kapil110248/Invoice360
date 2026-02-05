@@ -150,6 +150,18 @@ const chartOfAccountsService = {
     deleteContra: async (voucherNumber) => {
         const response = await axiosInstance.delete(`/contra/${voucherNumber}`);
         return response.data;
+    },
+
+    // --- Filtered Ledger APIs for Vouchers ---
+    
+    getPaymentSourceLedgers: async () => {
+        const response = await axiosInstance.get('/chart-of-accounts/ledgers/payment-sources');
+        return response.data;
+    },
+
+    getExpenseLedgers: async () => {
+        const response = await axiosInstance.get('/chart-of-accounts/ledgers/expenses');
+        return response.data;
     }
 };
 

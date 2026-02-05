@@ -498,6 +498,69 @@ const getAccountTypes = async (req, res) => {
     }
 };
 
+// Get Payment Source Ledgers (Cash, Bank accounts for "Paid From")
+const getPaymentSourceLedgers = async (req, res) => {
+    try {
+        const companyId = req.user.companyId;
+
+        const ledgers = await chartOfAccountsService.getAllLedgers(companyId);
+        
+        // Filter for Cash and Bank accounts
+        const paymentSources = ledgers.filter(ledger => {
+            const groupName = ledger.accountgroup?.name || '';
+            const subgroupName = ledger.accountsubgroup?.name || '';
+            const ledgerName = ledger.name || '';
+            
+            // Check if it's under Cash or Bank subgroups
+            return groupName.toLowerCase().includes('assets') && 
+                   (subgroupName.toLowerCase().includes('cash') || 
+                    subgroupName.toLowerCase().includes('bank') ||
+                    ledgerName.toLowerCase().includes('cash') ||
+                    ledgerName.toLowerCase().includes('bank'));
+        });
+
+        res.status(200).json({
+            success: true,
+            data: paymentSources
+        });
+    } catch (error) {
+        console.error('Error fetching payment source ledgers:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch payment sources'
+        });
+    }
+};
+
+// Get Expense Ledgers (for "Paid To")
+const getExpenseLedgers = async (req, res) => {
+    try {
+        const companyId = req.user.companyId;
+
+        const ledgers = await chartOfAccountsService.getAllLedgers(companyId);
+        
+        // Filter for Expense accounts
+        const expenseLedgers = ledgers.filter(ledger => {
+            const groupName = ledger.accountgroup?.name || '';
+            const groupType = ledger.accountgroup?.type || '';
+            
+            // Check if it's under Expenses group
+            return groupType === 'EXPENSES' || groupName.toLowerCase().includes('expense');
+        });
+
+        res.status(200).json({
+            success: true,
+            data: expenseLedgers
+        });
+    } catch (error) {
+        console.error('Error fetching expense ledgers:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch expense ledgers'
+        });
+    }
+};
+
 module.exports = {
     initializeCOA,
     getChartOfAccounts,
@@ -515,5 +578,7 @@ module.exports = {
     getAllLedgers,
     updateLedger,
     deleteLedger,
-    getAccountTypes
+    getAccountTypes,
+    getPaymentSourceLedgers,
+    getExpenseLedgers
 };

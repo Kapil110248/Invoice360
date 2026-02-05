@@ -965,6 +965,7 @@ exports.Prisma.WarehouseScalarFieldEnum = {
 exports.Prisma.VoucherScalarFieldEnum = {
   id: 'id',
   voucherNumber: 'voucherNumber',
+  manualReceiptNo: 'manualReceiptNo',
   voucherType: 'voucherType',
   date: 'date',
   companyId: 'companyId',
@@ -988,11 +989,13 @@ exports.Prisma.VoucheritemScalarFieldEnum = {
   id: 'id',
   voucherId: 'voucherId',
   productId: 'productId',
+  ledgerId: 'ledgerId',
   productName: 'productName',
   description: 'description',
   quantity: 'quantity',
   rate: 'rate',
   amount: 'amount',
+  narration: 'narration',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };

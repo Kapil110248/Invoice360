@@ -508,6 +508,7 @@ model ledger {
   transaction_transaction_debitLedgerIdToledger  transaction[]    @relation("transaction_debitLedgerIdToledger")
   voucher_paidFromLedger                         voucher[]        @relation("voucher_paidFromLedger")
   voucher_paidToLedger                           voucher[]        @relation("voucher_paidToLedger")
+  voucheritem                                    voucheritem[]    @relation("voucheritem_ledger")
 
   @@unique([companyId, name], map: "Ledger_companyId_name_key")
   @@index([groupId], map: "Ledger_groupId_fkey")
@@ -1468,6 +1469,7 @@ enum salesreturn_status {
 model voucher {
   id               Int           @id @default(autoincrement())
   voucherNumber    String
+  manualReceiptNo  String?
   voucherType      voucher_type
   date             DateTime      @default(now())
   companyId        Int
@@ -1503,15 +1505,18 @@ model voucheritem {
   id          Int      @id @default(autoincrement())
   voucherId   Int
   productId   Int?
+  ledgerId    Int?
   productName String?
   description String?  @db.Text
   quantity    Float    @default(1)
   rate        Float
   amount      Float
+  narration   String?  @db.Text
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
   voucher     voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   product     product? @relation(fields: [productId], references: [id])
+  ledger      ledger?  @relation("voucheritem_ledger", fields: [ledgerId], references: [id])
 
   @@index([voucherId])
   @@index([productId])

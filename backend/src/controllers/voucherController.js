@@ -6,6 +6,7 @@ const createVoucher = async (req, res) => {
     try {
         const {
             voucherNumber,
+            manualReceiptNo,
             voucherType,
             date,
             companyName,
@@ -115,16 +116,19 @@ const createVoucher = async (req, res) => {
 
         const voucherItems = items.map(item => ({
             productId: item.productId ? parseInt(item.productId) : null,
+            ledgerId: item.ledgerId ? parseInt(item.ledgerId) : null,
             productName: item.productName || item.name,
             description: item.description,
             quantity: parseFloat(item.quantity) || 1,
             rate: parseFloat(item.rate) || 0,
-            amount: parseFloat(item.amount) || 0
+            amount: parseFloat(item.amount) || 0,
+            narration: item.narration
         }));
 
         const voucher = await prisma.voucher.create({
             data: {
                 voucherNumber,
+                manualReceiptNo,
                 voucherType: voucherType.toUpperCase(),
                 date: date ? new Date(date) : new Date(),
                 companyId: parseInt(companyId),
@@ -147,7 +151,8 @@ const createVoucher = async (req, res) => {
             include: {
                 voucheritem: {
                     include: {
-                        product: true
+                        product: true,
+                        ledger: true
                     }
                 },
                 vendor: true,
@@ -262,7 +267,8 @@ const getVouchers = async (req, res) => {
             include: {
                 voucheritem: {
                     include: {
-                        product: true
+                        product: true,
+                        ledger: true
                     }
                 },
                 vendor: true,
@@ -294,7 +300,8 @@ const getVoucherById = async (req, res) => {
             include: {
                 voucheritem: {
                     include: {
-                        product: true
+                        product: true,
+                        ledger: true
                     }
                 },
                 vendor: true,
@@ -321,6 +328,7 @@ const updateVoucher = async (req, res) => {
         const { id } = req.params;
         const {
             voucherNumber,
+            manualReceiptNo,
             voucherType,
             date,
             companyName,
@@ -368,6 +376,7 @@ const updateVoucher = async (req, res) => {
             where: { id: parseInt(id) },
             data: {
                 voucherNumber,
+                manualReceiptNo,
                 voucherType: voucherType ? voucherType.toUpperCase() : undefined,
                 date: date ? new Date(date) : undefined,
                 companyName,
@@ -389,7 +398,8 @@ const updateVoucher = async (req, res) => {
             include: {
                 voucheritem: {
                     include: {
-                        product: true
+                        product: true,
+                        ledger: true
                     }
                 },
                 vendor: true,

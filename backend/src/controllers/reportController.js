@@ -208,14 +208,114 @@ const getPosReport = async (req, res) => {
     }
 };
 
-// Get Tax Report (Monthly Breakdown)
+// Get Tax Report (Summary or Detailed List)
 const getTaxReport = async (req, res) => {
     try {
         const companyId = req.user?.companyId || req.query.companyId;
         if (!companyId) return res.status(400).json({ success: false, message: 'Company ID is required' });
 
-        const year = parseInt(req.query.year) || new Date().getFullYear();
+        const { mode, type, startDate, endDate, partyId, paymentMethod, year: queryYear } = req.query;
+        const year = parseInt(queryYear) || new Date().getFullYear();
 
+        // 1. DETAILED MODE (Transaction List)
+        if (mode === 'detailed') {
+            let transactions = [];
+            const dateFilter = (startDate && endDate) 
+                ? { 
+                    gte: new Date(startDate), 
+                    lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) 
+                  }
+                : { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) };
+
+            if (type === 'sales') {
+                // Fetch Invoices
+                const invoices = await prisma.invoice.findMany({
+                    where: {
+                        companyId: parseInt(companyId),
+                        date: dateFilter,
+                        ...(partyId && { customerId: parseInt(partyId) })
+                    },
+                    include: { customer: { select: { name: true } }, receipt: { select: { paymentMode: true } } }
+                });
+
+                // Fetch POS Invoices
+                const posInvoices = await prisma.posinvoice.findMany({
+                    where: {
+                        companyId: parseInt(companyId),
+                        createdAt: dateFilter,
+                        ...(partyId && { customerId: parseInt(partyId) })
+                    },
+                    include: { customer: { select: { name: true } } }
+                });
+
+                // Map Invoices
+                invoices.forEach(inv => {
+                    // Match payment method if provided
+                    const method = inv.receipt[0]?.paymentMode || 'Credit';
+                    if (paymentMethod && paymentMethod !== 'All' && method !== paymentMethod) return;
+
+                    transactions.push({
+                        id: inv.id,
+                        ref: inv.invoiceNumber,
+                        party: inv.customer?.name || 'Unknown',
+                        date: inv.date,
+                        amount: inv.totalAmount,
+                        method: method,
+                        discount: inv.discountAmount,
+                        tax: inv.taxAmount
+                    });
+                });
+
+                // Map POS
+                posInvoices.forEach(pos => {
+                    const method = pos.paymentMethod || 'Cash';
+                    if (paymentMethod && paymentMethod !== 'All' && method !== paymentMethod) return;
+
+                    transactions.push({
+                        id: pos.id,
+                        ref: pos.invoiceNumber,
+                        party: pos.customer?.name || 'Walk-in Customer',
+                        date: pos.createdAt,
+                        amount: pos.totalAmount,
+                        method: method,
+                        discount: pos.discountAmount || 0,
+                        tax: pos.taxAmount
+                    });
+                });
+            } else {
+                // Fetch Purchase Bills
+                const bills = await prisma.purchasebill.findMany({
+                    where: {
+                        companyId: parseInt(companyId),
+                        date: dateFilter,
+                        ...(partyId && { vendorId: parseInt(partyId) })
+                    },
+                    include: { vendor: { select: { name: true } }, payment: { select: { paymentMode: true } } }
+                });
+
+                bills.forEach(bill => {
+                    const method = bill.payment[0]?.paymentMode || 'Credit';
+                    if (paymentMethod && paymentMethod !== 'All' && method !== paymentMethod) return;
+
+                    transactions.push({
+                        id: bill.id,
+                        ref: bill.billNumber,
+                        party: bill.vendor?.name || 'Unknown',
+                        date: bill.date,
+                        amount: bill.totalAmount,
+                        method: method,
+                        discount: bill.discountAmount,
+                        tax: bill.taxAmount
+                    });
+                });
+            }
+
+            // Sort by date descending
+            transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+            return res.status(200).json({ success: true, data: transactions });
+        }
+
+        // 2. SUMMARY MODE (Existing Logic)
         // Fetch Company Details for State comparison
         const company = await prisma.company.findUnique({
             where: { id: parseInt(companyId) },
@@ -223,7 +323,6 @@ const getTaxReport = async (req, res) => {
         });
         const companyState = company?.state?.toLowerCase().trim();
 
-        // --- 1. INCOME TAX (Sales + POS) ---
         // Fetch Invoices
         const invoices = await prisma.invoice.findMany({
             where: {
@@ -236,7 +335,7 @@ const getTaxReport = async (req, res) => {
             include: { customer: { select: { billingState: true } } }
         });
 
-        // Fetch POS Invoices (Assume Intra-state/CGST+SGST for simplicity unless customer is tagged)
+        // Fetch POS Invoices
         const posInvoices = await prisma.posinvoice.findMany({
             where: {
                 companyId: parseInt(companyId),
@@ -248,7 +347,6 @@ const getTaxReport = async (req, res) => {
             include: { customer: { select: { billingState: true } } }
         });
 
-        // Initialize Arrays (12 months)
         const incomeStats = {
             CGST: Array(12).fill(0),
             SGST: Array(12).fill(0),
@@ -260,7 +358,6 @@ const getTaxReport = async (req, res) => {
             const tax = parseFloat(amount || 0);
 
             if (tax > 0) {
-                // Determine Tax Type
                 let isInterState = false;
                 if (companyState && entityState) {
                     isInterState = companyState !== entityState.toLowerCase().trim();
@@ -269,7 +366,6 @@ const getTaxReport = async (req, res) => {
                 if (isInterState) {
                     targetStats.IGST[month] += tax;
                 } else {
-                    // Split 50-50
                     targetStats.CGST[month] += tax / 2;
                     targetStats.SGST[month] += tax / 2;
                 }
@@ -277,9 +373,8 @@ const getTaxReport = async (req, res) => {
         };
 
         invoices.forEach(inv => processTax(inv.taxAmount, inv.date, inv.customer?.billingState, incomeStats));
-        posInvoices.forEach(pos => processTax(pos.taxAmount, pos.createdAt, pos.customer?.billingState || companyState, incomeStats)); // Default POS to local if no cust
+        posInvoices.forEach(pos => processTax(pos.taxAmount, pos.createdAt, pos.customer?.billingState || companyState, incomeStats));
 
-        // --- 2. EXPENSE TAX (Purchases) ---
         const bills = await prisma.purchasebill.findMany({
             where: {
                 companyId: parseInt(companyId),
@@ -791,103 +886,147 @@ const getProfitLoss = async (req, res) => {
     }
 };
 
-// Get VAT Report (Detailed Transaction List)
+// Get VAT Report (Summarized for GCC VAT Return)
 const getVatReport = async (req, res) => {
     try {
         const companyId = req.user?.companyId || req.query.companyId;
         if (!companyId) return res.status(400).json({ success: false, message: 'Company ID is required' });
 
-        const year = parseInt(req.query.year) || new Date().getFullYear();
-        const startDate = new Date(`${year}-01-01`);
-        const endDate = new Date(`${year}-12-31`);
-        endDate.setHours(23, 59, 59, 999);
+        const { startDate, endDate } = req.query;
+        let dateFilter = {};
+        if (startDate && endDate) {
+            dateFilter = { gte: new Date(startDate), lte: new Date(endDate) };
+        } else {
+            // Default to current year if no dates provided
+            const year = new Date().getFullYear();
+            dateFilter = { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) };
+        }
 
-        // 1. Fetch Sales (Invoices)
+        // 1. Fetch Sales (Invoices & POS)
         const invoices = await prisma.invoice.findMany({
-            where: {
-                companyId: parseInt(companyId),
-                date: { gte: startDate, lte: endDate }
-            },
-            include: { customer: { select: { name: true } } }
+            where: { companyId: parseInt(companyId), date: dateFilter },
+            include: { invoiceitem: true }
         });
 
-        // 2. Fetch POS Sales
         const posInvoices = await prisma.posinvoice.findMany({
-            where: {
-                companyId: parseInt(companyId),
-                createdAt: { gte: startDate, lte: endDate }
-            },
-            include: { customer: { select: { name: true } } }
+            where: { companyId: parseInt(companyId), createdAt: dateFilter },
+            include: { posinvoiceitem: true }
         });
 
-        // 3. Fetch Purchases (Bills)
+        // 2. Fetch Purchases (Bills)
         const bills = await prisma.purchasebill.findMany({
-            where: {
-                companyId: parseInt(companyId),
-                date: { gte: startDate, lte: endDate }
-            },
-            include: { vendor: { select: { name: true } } }
+            where: { companyId: parseInt(companyId), date: dateFilter },
+            include: { purchasebillitem: true }
         });
 
-        // Map to Unified Structure
-        let reportData = [];
+        // 3. Fetch Adjustments (Returns)
+        const salesReturns = await prisma.salesreturn.findMany({
+            where: { companyId: parseInt(companyId), date: dateFilter }
+        });
 
-        // Map Invoices
+        const purchaseReturns = await prisma.purchasereturn.findMany({
+            where: { companyId: parseInt(companyId), date: dateFilter }
+        });
+
+        // Initialize Summary Data
+        let outward = { taxable: 0, vat: 0 };
+        let inward = { taxable: 0, vat: 0 };
+        let adjustments = { taxable: 0, vat: 0 };
+        let exempt = { taxable: 0, vat: 0 };
+
+        // Process Invoices
         invoices.forEach(inv => {
-            const taxable = parseFloat(inv.subtotal) || 0;
-            const tax = parseFloat(inv.taxAmount) || 0;
-            const rate = taxable > 0 ? ((tax / taxable) * 100).toFixed(1) : 0;
-
-            reportData.push({
-                id: `INV-${inv.id}`,
-                type: 'Sales',
-                description: `Invoice #${inv.invoiceNumber} - ${inv.customer.name}`,
-                taxableAmount: taxable,
-                vatAmount: tax,
-                vatRate: rate,
-                date: inv.date
+            inv.invoiceitem.forEach(item => {
+                const amount = item.amount || 0;
+                const taxRate = item.taxRate || 0;
+                if (taxRate > 0) {
+                    outward.taxable += amount;
+                    outward.vat += (amount * taxRate) / 100;
+                } else {
+                    exempt.taxable += amount;
+                }
             });
         });
 
-        // Map POS
+        // Process POS
         posInvoices.forEach(pos => {
-            const taxable = parseFloat(pos.subtotal) || 0;
-            const tax = parseFloat(pos.taxAmount) || 0;
-            const rate = taxable > 0 ? ((tax / taxable) * 100).toFixed(1) : 0;
-            const custName = pos.customer ? pos.customer.name : 'Walk-in Customer';
-
-            reportData.push({
-                id: `POS-${pos.id}`,
-                type: 'Sales',
-                description: `POS #${pos.invoiceNumber} - ${custName}`,
-                taxableAmount: taxable,
-                vatAmount: tax,
-                vatRate: rate,
-                date: pos.createdAt
+            pos.posinvoiceitem.forEach(item => {
+                const amount = item.amount || 0;
+                const taxRate = item.taxRate || 0;
+                if (taxRate > 0) {
+                    outward.taxable += amount;
+                    outward.vat += (amount * taxRate) / 100;
+                } else {
+                    exempt.taxable += amount;
+                }
             });
         });
 
-        // Map Bills
+        // Process Bills
         bills.forEach(bill => {
-            const taxable = parseFloat(bill.subtotal) || 0;
-            const tax = parseFloat(bill.taxAmount) || 0;
-            const rate = taxable > 0 ? ((tax / taxable) * 100).toFixed(1) : 0;
-
-            reportData.push({
-                id: `BILL-${bill.id}`,
-                type: 'Purchase',
-                description: `Bill #${bill.billNumber} - ${bill.vendor.name}`,
-                taxableAmount: taxable,
-                vatAmount: tax,
-                vatRate: rate,
-                date: bill.date
+            bill.purchasebillitem.forEach(item => {
+                const amount = item.amount || 0;
+                const taxRate = item.taxRate || 0;
+                if (taxRate > 0) {
+                    inward.taxable += amount;
+                    inward.vat += (amount * taxRate) / 100;
+                } else {
+                    // Purchase exemptions usually aren't tracked the same way as sales exports, 
+                    // but we'll include them if tax is 0.
+                    inward.taxable += amount; // We'll keep them in inward for now, or put in exempt?
+                    // GCC VAT usually separates Export Sales as Exempt/Zero-Rated.
+                }
             });
         });
 
-        // Sort by Date Descending
-        reportData.sort((a, b) => new Date(b.date) - new Date(a.date));
+        // Process Adjustments (Returns act as negative adjustments)
+        // Note: Returns currently don't store taxRate in items, so we'll assume a standard 5% for now if total > 0
+        // and it's not explicitly zero. In a real system, you'd match the original invoice tax rate.
+        salesReturns.forEach(ret => {
+            const amount = ret.totalAmount || 0;
+            adjustments.taxable -= amount; // Sales Return reduces Outward
+            adjustments.vat -= (amount * 5) / 105; // Assuming amount is inclusive and 5% VAT
+        });
 
-        res.status(200).json({ success: true, data: reportData });
+        purchaseReturns.forEach(ret => {
+            const amount = ret.totalAmount || 0;
+            adjustments.taxable += amount; // Purchase Return reduces Inward (effectively an adjustment)
+            adjustments.vat += (amount * 5) / 105;
+        });
+
+        // Format result to match UI expectation
+        const vatData = [
+            { 
+                type: 'Outward Supplies', 
+                description: 'Sales to GCC customers', 
+                taxableAmount: `R${outward.taxable.toFixed(2)}`, 
+                vatRate: '5%', 
+                vatAmount: `R${outward.vat.toFixed(2)}` 
+            },
+            { 
+                type: 'Inward Supplies', 
+                description: 'Purchase from GCC vendors', 
+                taxableAmount: `R${inward.taxable.toFixed(2)}`, 
+                vatRate: '5%', 
+                vatAmount: `R${inward.vat.toFixed(2)}` 
+            },
+            { 
+                type: 'Adjustments', 
+                description: 'Credit/Debit notes issued', 
+                taxableAmount: `R${adjustments.taxable.toFixed(2)}`, 
+                vatRate: '5%', 
+                vatAmount: `R${adjustments.vat.toFixed(2)}` 
+            },
+            { 
+                type: 'Exempt Supplies', 
+                description: 'Exported goods (zero-rated)', 
+                taxableAmount: `R${exempt.taxable.toFixed(2)}`, 
+                vatRate: '0%', 
+                vatAmount: `R0.00` 
+            },
+        ];
+
+        res.status(200).json({ success: true, data: vatData });
 
     } catch (error) {
         console.error('Error fetching VAT report:', error);
@@ -1381,6 +1520,144 @@ const getAllTransactions = async (req, res) => {
     }
 };
 
+// Get Cash Flow Transactions (Detailed List)
+const getCashFlowTransactions = async (req, res) => {
+    try {
+        const companyId = req.user?.companyId || req.query.companyId;
+        if (!companyId) return res.status(400).json({ success: false, message: 'Company ID is required' });
+
+        // 1. Identify Liquid Asset Ledgers (Bank Accounts, Cash-in-hand)
+        const liquidGroups = ['Bank Accounts', 'Cash-in-hand'];
+        
+        const targetLedgers = await prisma.ledger.findMany({
+            where: {
+                companyId: parseInt(companyId),
+                OR: [
+                    { accountgroup: { name: { in: liquidGroups } } },
+                    { accountsubgroup: { name: { in: liquidGroups } } }
+                ]
+            },
+            select: { id: true, name: true, openingBalance: true }
+        });
+
+        const liquidLedgerIds = targetLedgers.map(l => l.id);
+
+        if (liquidLedgerIds.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // 2. Fetch Transactions involving these ledgers
+        const transactions = await prisma.transaction.findMany({
+            where: {
+                companyId: parseInt(companyId),
+                OR: [
+                    { debitLedgerId: { in: liquidLedgerIds } },
+                    { creditLedgerId: { in: liquidLedgerIds } }
+                ]
+            },
+            include: {
+                receipt: { select: { receiptNumber: true, paymentMode: true } },
+                payment: { select: { paymentNumber: true, paymentMode: true } },
+                debitLedger: true,
+                creditLedger: true
+            },
+            orderBy: { date: 'asc' }
+        });
+
+        // 3. Calculate Running Balances
+        const ledgerBalances = {};
+        let totalSystemBalance = 0;
+
+        targetLedgers.forEach(l => {
+            ledgerBalances[l.id] = l.openingBalance || 0;
+            totalSystemBalance += (l.openingBalance || 0);
+        });
+
+        const result = transactions.map(tx => {
+            const amount = tx.amount;
+            const isDebitLiquid = liquidLedgerIds.includes(tx.debitLedgerId);
+            const isCreditLiquid = liquidLedgerIds.includes(tx.creditLedgerId);
+
+            let transInfo = {
+                id: tx.id,
+                date: tx.date,
+                description: tx.narration || 'Transaction',
+                bank: '',
+                credit: 'R0.00',
+                debit: 'R0.00',
+                accBal: 0,
+                totalBal: 0,
+                method: 'Cash'
+            };
+
+            // Derive Method
+            if (tx.receipt?.paymentMode) transInfo.method = tx.receipt.paymentMode;
+            else if (tx.payment?.paymentMode) transInfo.method = tx.payment.paymentMode;
+            else transInfo.method = tx.voucherType || 'Cash';
+
+            if (isDebitLiquid && !isCreditLiquid) {
+                // Money IN (Receipt)
+                ledgerBalances[tx.debitLedgerId] += amount;
+                totalSystemBalance += amount;
+                transInfo.bank = tx.debitLedger.name;
+                transInfo.credit = `R${amount.toFixed(2)}`;
+                transInfo.accBal = ledgerBalances[tx.debitLedgerId];
+                transInfo.description = tx.narration || `Received from ${tx.creditLedger?.name || 'Party'}`;
+
+            } else if (!isDebitLiquid && isCreditLiquid) {
+                // Money OUT (Payment)
+                ledgerBalances[tx.creditLedgerId] -= amount;
+                totalSystemBalance -= amount;
+                transInfo.bank = tx.creditLedger.name;
+                transInfo.debit = `R${amount.toFixed(2)}`;
+                transInfo.accBal = ledgerBalances[tx.creditLedgerId];
+                transInfo.description = tx.narration || `Paid to ${tx.debitLedger?.name || 'Party'}`;
+
+            } else if (isDebitLiquid && isCreditLiquid) {
+                // Transfer between accounts
+                ledgerBalances[tx.debitLedgerId] += amount;
+                ledgerBalances[tx.creditLedgerId] -= amount;
+                
+                return [
+                    {
+                        ...transInfo,
+                        id: `${tx.id}_in`,
+                        bank: tx.debitLedger.name,
+                        description: `Transfer from ${tx.creditLedger.name}`,
+                        credit: `R${amount.toFixed(2)}`,
+                        debit: 'R0.00',
+                        accBal: `R${ledgerBalances[tx.debitLedgerId].toFixed(2)}`,
+                        totalBal: `R${totalSystemBalance.toFixed(2)}`
+                    },
+                    {
+                        ...transInfo,
+                        id: `${tx.id}_out`,
+                        bank: tx.creditLedger.name,
+                        description: `Transfer to ${tx.debitLedger.name}`,
+                        credit: 'R0.00',
+                        debit: `R${amount.toFixed(2)}`,
+                        accBal: `R${ledgerBalances[tx.creditLedgerId].toFixed(2)}`,
+                        totalBal: `R${totalSystemBalance.toFixed(2)}`
+                    }
+                ];
+            }
+
+            transInfo.totalBal = totalSystemBalance;
+            transInfo.accBal = `R${transInfo.accBal.toFixed(2)}`;
+            transInfo.totalBal = `R${transInfo.totalBal.toFixed(2)}`;
+            
+            return transInfo;
+        });
+
+        const flatResult = result.flat();
+        res.status(200).json({ success: true, data: flatResult.reverse() });
+
+    } catch (error) {
+        console.error('Error fetching Cash Flow Transactions:', error);
+        res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     getSalesReport,
     getPurchaseReport,
@@ -1394,5 +1671,6 @@ module.exports = {
     getDayBook,
     getJournalReport,
     getTrialBalance,
-    getAllTransactions
+    getAllTransactions,
+    getCashFlowTransactions
 };

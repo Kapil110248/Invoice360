@@ -7,6 +7,10 @@ const createCustomer = async (req, res) => {
         const companyId = req.user.companyId;
         const customerData = req.body;
 
+        // Extract file URLs from Cloudinary upload
+        const profileImage = req.files?.profileImage?.[0]?.path || customerData.profileImage;
+        const anyFile = req.files?.anyFile?.[0]?.path || customerData.anyFile;
+
         // Validate required fields
         if (!customerData.name) {
             return res.status(400).json({
@@ -58,8 +62,8 @@ const createCustomer = async (req, res) => {
                     nameArabic: customerData.nameArabic,
                     companyName: customerData.companyName,
                     companyLocation: customerData.companyLocation,
-                    profileImage: customerData.profileImage,
-                    anyFile: customerData.anyFile,
+                    profileImage: profileImage,
+                    anyFile: anyFile,
                     accountType: customerData.accountType,
                     balanceType: customerData.balanceType || 'Debit',
                     accountName: ledgerName,
@@ -72,7 +76,7 @@ const createCustomer = async (req, res) => {
                     email: customerData.email,
                     creditPeriod: customerData.creditPeriod ? parseInt(customerData.creditPeriod) : null,
                     gstNumber: customerData.gstNumber,
-                    gstEnabled: customerData.gstEnabled || false,
+                    gstEnabled: customerData.gstEnabled === 'true' || customerData.gstEnabled === true,
 
                     // Billing Address
                     billingName: customerData.billingName,
@@ -84,7 +88,7 @@ const createCustomer = async (req, res) => {
                     billingZipCode: customerData.billingZipCode,
 
                     // Shipping Address
-                    shippingSameAsBilling: customerData.shippingSameAsBilling || false,
+                    shippingSameAsBilling: customerData.shippingSameAsBilling === 'true' || customerData.shippingSameAsBilling === true,
                     shippingName: customerData.shippingName,
                     shippingPhone: customerData.shippingPhone,
                     shippingAddress: customerData.shippingAddress,
@@ -215,6 +219,10 @@ const updateCustomer = async (req, res) => {
         const { id } = req.params;
         const customerData = req.body;
 
+        // Extract file URLs from Cloudinary upload
+        const profileImage = req.files?.profileImage?.[0]?.path || customerData.profileImage;
+        const anyFile = req.files?.anyFile?.[0]?.path || customerData.anyFile;
+
         // Check if customer exists
         const existingCustomer = await prisma.customer.findFirst({
             where: {
@@ -241,8 +249,8 @@ const updateCustomer = async (req, res) => {
                     nameArabic: customerData.nameArabic,
                     companyName: customerData.companyName,
                     companyLocation: customerData.companyLocation,
-                    profileImage: customerData.profileImage,
-                    anyFile: customerData.anyFile,
+                    profileImage: profileImage,
+                    anyFile: anyFile,
                     accountType: customerData.accountType,
                     balanceType: customerData.balanceType,
                     accountBalance: parseFloat(customerData.accountBalance) || 0,
@@ -253,7 +261,7 @@ const updateCustomer = async (req, res) => {
                     email: customerData.email,
                     creditPeriod: customerData.creditPeriod ? parseInt(customerData.creditPeriod) : null,
                     gstNumber: customerData.gstNumber,
-                    gstEnabled: customerData.gstEnabled,
+                    gstEnabled: customerData.gstEnabled === 'true' || customerData.gstEnabled === true,
 
                     // Billing Address
                     billingName: customerData.billingName,
@@ -265,7 +273,7 @@ const updateCustomer = async (req, res) => {
                     billingZipCode: customerData.billingZipCode,
 
                     // Shipping Address
-                    shippingSameAsBilling: customerData.shippingSameAsBilling,
+                    shippingSameAsBilling: customerData.shippingSameAsBilling === 'true' || customerData.shippingSameAsBilling === true,
                     shippingName: customerData.shippingName,
                     shippingPhone: customerData.shippingPhone,
                     shippingAddress: customerData.shippingAddress,

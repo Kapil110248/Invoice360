@@ -25,10 +25,13 @@ router.delete('/subgroups/:id', chartOfAccountsController.deleteAccountSubGroup)
 
 // Ledgers CRUD
 router.post('/ledgers', chartOfAccountsController.createLedger);
+// Specific routes MUST come before /:id routes to avoid route collision
+router.get('/ledgers/payment-sources', chartOfAccountsController.getPaymentSourceLedgers);
+router.get('/ledgers/expenses', chartOfAccountsController.getExpenseLedgers);
 router.get('/ledgers', chartOfAccountsController.getAllLedgers);
+router.get('/ledgers/:id/transactions', chartOfAccountsController.getLedgerTransactions);
 router.get('/ledgers/:id', chartOfAccountsController.getLedger);
 router.put('/ledgers/:id', chartOfAccountsController.updateLedger);
 router.delete('/ledgers/:id', chartOfAccountsController.deleteLedger);
-router.get('/ledgers/:id/transactions', chartOfAccountsController.getLedgerTransactions);
 
 module.exports = router;

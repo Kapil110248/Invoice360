@@ -105,6 +105,16 @@ const Customers = () => {
         });
     };
 
+    const handleFileChange = (e) => {
+        const { name, files } = e.target;
+        if (files && files[0]) {
+            setFormData(prev => ({
+                ...prev,
+                [name]: files[0]
+            }));
+        }
+    };
+
     const resetForm = () => {
         setFormData(initialFormState);
         setCurrentCustomer(null);
@@ -345,29 +355,60 @@ const Customers = () => {
                                     </div>
                                 </div>
 
-                                {/* File Uploads Mockup */}
+                                {/* File Uploads */}
                                 <div className="Customers-form-row Customers-mixed-col">
                                     <div className="Customers-form-group Customers-profile-img">
                                         <label className="Customers-form-label">Profile Image</label>
                                         <div className="Customers-file-input-wrapper">
                                             <div className="Customers-file-label">
                                                 <span className="Customers-file-btn">Choose File</span>
-                                                <span className="Customers-file-name">No file chosen</span>
+                                                <span className="Customers-file-name">
+                                                    {formData.profileImage?.name || (typeof formData.profileImage === 'string' ? 'Existing Image' : 'No file chosen')}
+                                                </span>
                                             </div>
-                                            <input type="file" className="Customers-file-input" disabled={modalMode === 'view'} />
+                                            <input 
+                                                type="file" 
+                                                name="profileImage"
+                                                className="Customers-file-input" 
+                                                onChange={handleFileChange}
+                                                disabled={modalMode === 'view'} 
+                                                accept="image/*"
+                                            />
                                         </div>
                                         <span className="Customers-file-note">JPEG, PNG or JPG (max 5MB)</span>
+                                        {formData.profileImage && (
+                                            <div className="mt-2">
+                                                <img 
+                                                    src={typeof formData.profileImage === 'string' ? formData.profileImage : URL.createObjectURL(formData.profileImage)} 
+                                                    alt="Preview" 
+                                                    className="w-20 h-20 object-cover rounded-md border"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="Customers-form-group Customers-any-file">
                                         <label className="Customers-form-label">Any File</label>
                                         <div className="Customers-file-input-wrapper">
                                             <div className="Customers-file-label">
                                                 <span className="Customers-file-btn">Choose File</span>
-                                                <span className="Customers-file-name">No file chosen</span>
+                                                <span className="Customers-file-name">
+                                                    {formData.anyFile?.name || (typeof formData.anyFile === 'string' ? 'Existing File' : 'No file chosen')}
+                                                </span>
                                             </div>
-                                            <input type="file" className="Customers-file-input" disabled={modalMode === 'view'} />
+                                            <input 
+                                                type="file" 
+                                                name="anyFile"
+                                                className="Customers-file-input" 
+                                                onChange={handleFileChange}
+                                                disabled={modalMode === 'view'} 
+                                            />
                                         </div>
-                                        <span className="Customers-file-note">Any file type. If image, max 5MB</span>
+                                        <span className="Customers-file-note">Any file type. Max 5MB</span>
+                                        {typeof formData.anyFile === 'string' && formData.anyFile && (
+                                            <div className="mt-2 text-sm text-blue-600">
+                                                <a href={formData.anyFile} target="_blank" rel="noopener noreferrer">View Attachment</a>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

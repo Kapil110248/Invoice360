@@ -4,7 +4,15 @@ const customerService = {
     // Create new customer
     createCustomer: async (customerData) => {
         try {
-            const response = await axiosInstance.post('/customers', customerData);
+            const formData = new FormData();
+            Object.keys(customerData).forEach(key => {
+                if (customerData[key] !== null && customerData[key] !== undefined) {
+                    formData.append(key, customerData[key]);
+                }
+            });
+            const response = await axiosInstance.post('/customers', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
             return response.data;
         } catch (error) {
             throw error.response?.data || error;
@@ -35,7 +43,15 @@ const customerService = {
     // Update customer
     updateCustomer: async (id, customerData) => {
         try {
-            const response = await axiosInstance.put(`/customers/${id}`, customerData);
+            const formData = new FormData();
+            Object.keys(customerData).forEach(key => {
+                if (customerData[key] !== null && customerData[key] !== undefined) {
+                    formData.append(key, customerData[key]);
+                }
+            });
+            const response = await axiosInstance.put(`/customers/${id}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
             return response.data;
         } catch (error) {
             throw error.response?.data || error;
@@ -46,6 +62,16 @@ const customerService = {
     deleteCustomer: async (id) => {
         try {
             const response = await axiosInstance.delete(`/customers/${id}`);
+            return response.data;
+        } catch (error) {
+            throw error.response?.data || error;
+        }
+    },
+
+    // Get customer statement/ledger
+    getStatement: async (id) => {
+        try {
+            const response = await axiosInstance.get(`/customers/${id}/statement`);
             return response.data;
         } catch (error) {
             throw error.response?.data || error;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Eye, Pencil, Trash2, Plus, Download, Printer, FileText, Receipt, History, Truck, ShoppingCart } from 'lucide-react';
 import './CustomerDetail.css';
-import customerService from '../../../api/customerService';
+import customerService from '../../../services/customerService';
 
 const CustomerDetail = () => {
     const { id } = useParams();
@@ -21,15 +21,15 @@ const CustomerDetail = () => {
         try {
             setLoading(true);
             const [custRes, statementRes] = await Promise.all([
-                customerService.getById(id),
+                customerService.getCustomerById(id),
                 customerService.getStatement(id)
             ]);
 
-            if (custRes.data.success) {
-                setCustomer(custRes.data.data);
+            if (custRes.success) {
+                setCustomer(custRes.data);
             }
-            if (statementRes.data.success) {
-                setStatement(statementRes.data.data.statement);
+            if (statementRes.success) {
+                setStatement(statementRes.data.statement);
             }
         } catch (error) {
             console.error("Error fetching customer details:", error);
@@ -84,10 +84,33 @@ const CustomerDetail = () => {
                 <div className="CustomerDetail-info-card">
                     <h3 className="CustomerDetail-card-title">Customer Info</h3>
                     <div className="CustomerDetail-card-content">
-                        <p className="CustomerDetail-primary-text">{customer.name}</p>
-                        <p className="CustomerDetail-secondary-text">{customer.email}</p>
+                        <div className="flex items-center gap-4 mb-3">
+                            {customer.profileImage && (
+                                <img 
+                                    src={customer.profileImage} 
+                                    alt={customer.name} 
+                                    className="w-16 h-16 rounded-full object-cover border-2 border-green-500"
+                                />
+                            )}
+                            <div>
+                                <p className="CustomerDetail-primary-text">{customer.name}</p>
+                                <p className="CustomerDetail-secondary-text">{customer.email}</p>
+                            </div>
+                        </div>
                         <p className="CustomerDetail-secondary-text">{customer.phone}</p>
                         <p className="CustomerDetail-secondary-text">{customer.gstNumber && `GST: ${customer.gstNumber}`}</p>
+                        {customer.anyFile && (
+                            <div className="mt-3">
+                                <a 
+                                    href={customer.anyFile} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                >
+                                    <FileText size={16} /> View Attachment
+                                </a>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="CustomerDetail-info-card">
