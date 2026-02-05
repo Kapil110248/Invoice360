@@ -59,7 +59,7 @@ const Login = () => {
                 <div className="login-card">
                     <div className="login-header">
                         <h1 className="logo-text">
-                            <span className="accent">Zirak</span> Books
+                            <span className="accent">Invoice</span> 360
                         </h1>
                         <p className="login-subtext">
                             Welcome back! Please sign in to continue.
@@ -150,7 +150,6 @@ const Login = () => {
                 {/* RIGHT SIDE – BRANDING */}
                 <div className="brand-card">
                     <img
-                        // src="https://zirak-book.netlify.app/assets/account-D0hzE4k5.jpg"
                         src="https://i.ibb.co/PvMV0BpB/image.png"
                         alt="Accounting"
                         className="brand-image"

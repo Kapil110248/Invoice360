@@ -39,7 +39,7 @@ const Payment = () => {
 
     // Form State
     const [companyDetails, setCompanyDetails] = useState({
-        name: 'My Company', address: '', email: '', phone: ''
+        name: 'Invoice 360', address: '', email: '', phone: ''
     });
     const [paymentMeta, setPaymentMeta] = useState({
         manualNo: '', date: new Date().toISOString().split('T')[0], mode: 'Bank Transfer'
@@ -552,14 +552,14 @@ const Payment = () => {
                                             </div>
                                         )}
                                         <div className="pp-receipt-company-details">
-                                            <h2 className="pp-receipt-company-name">{companyDetails.name || 'Zirakbook Solutions Ltd.'}</h2>
+                                            <h2 className="pp-receipt-company-name">{companyDetails.name || 'Invoice 360'}</h2>
                                             <p className="pp-receipt-company-text">{companyDetails.email || 'company@gmail.com'}</p>
                                             <p className="pp-receipt-company-text">{companyDetails.phone || '1234567890'}</p>
                                             <p className="pp-receipt-company-text">{companyDetails.address || 'Kiaan, 123 Business, Indore'}</p>
                                         </div>
                                     </div>
                                     <div className="pp-receipt-meta-section">
-                                        <h1 className="pp-receipt-title">BIIL</h1>
+                                        <h1 className="pp-receipt-title">BILL</h1>
                                         <div className="pp-receipt-meta-details">
                                             <p><span className="pp-receipt-meta-label">Number:</span> #{viewPayment.paymentNumber}</p>
                                             <p><span className="pp-receipt-meta-label">Issue:</span> {new Date(viewPayment.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</p>

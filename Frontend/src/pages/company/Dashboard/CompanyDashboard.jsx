@@ -73,7 +73,7 @@ const CompanyDashboard = () => {
     return (
         <div className="company-dashboard">
             <div className="dashboard-header">
-                <div className="dashboard-title">ZirakBook Dashboard</div>
+                <div className="dashboard-title">Invoice 360 Dashboard</div>
             </div>
 
             {/* Top Metrics Grid */}

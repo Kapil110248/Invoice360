@@ -37,7 +37,7 @@ const SalesOrder = () => {
 
     // Form State
     const [companyDetails, setCompanyDetails] = useState({
-        name: 'Zirak Books', address: '123 Business Avenue, Suite 404', email: 'info@zirakbooks.com', phone: '123-456-7890', notes: '', terms: ''
+        name: 'Invoice 360', address: '123 Business Avenue, Suite 404', email: 'info@invoice360.com', phone: '123-456-7890', notes: '', terms: ''
     });
     const [orderMeta, setOrderMeta] = useState({
         manualNo: '', date: new Date().toISOString().split('T')[0], deliveryDate: ''
@@ -64,9 +64,9 @@ const SalesOrder = () => {
                 const res = await companyService.getById(companyId);
                 const data = res.data;
                 setCompanyDetails({
-                    name: data.name || 'Zirak Books',
+                    name: data.name || 'Invoice 360',
                     address: data.address || '123 Business Avenue, Suite 404',
-                    email: data.email || 'info@zirakbooks.com',
+                    email: data.email || 'info@invoice360.com',
                     phone: data.phone || '123-456-7890',
                     logo: data.logo || null,
                     notes: data.notes || '',

@@ -124,7 +124,7 @@ const Invoice = () => {
 
     // Form State
     const [companyDetails, setCompanyDetails] = useState({
-        name: 'Zirak Books', address: '123 Business Avenue, Suite 404', email: 'info@zirakbooks.com', phone: '123-456-7890', logo: null, notes: '', terms: '', showQr: true
+        name: 'Invoice 360', address: '123 Business Avenue, Suite 404', email: 'info@invoice360.com', phone: '123-456-7890', logo: null, notes: '', terms: '', showQr: true
     });
     const [invoiceMeta, setInvoiceMeta] = useState({
         manualNo: '', date: new Date().toISOString().split('T')[0], dueDate: ''
@@ -169,9 +169,9 @@ const Invoice = () => {
                 const res = await companyService.getById(companyId);
                 const data = res.data;
                 setCompanyDetails({
-                    name: data.name || 'Zirak Books',
+                    name: data.name || 'Invoice 360',
                     address: data.address || '123 Business Avenue, Suite 404',
-                    email: data.email || 'info@zirakbooks.com',
+                    email: data.email || 'info@invoice360.com',
                     phone: data.phone || '123-456-7890',
                     logo: data.logo || null,
                     notes: data.notes || '',
@@ -234,7 +234,7 @@ const Invoice = () => {
     const [bankDetails, setBankDetails] = useState({
         bankName: 'HDFC Bank',
         accNo: '50200012345678',
-        holderName: 'Zirak Trading Pvt Ltd',
+        holderName: 'Invoice 360 Pvt Ltd',
         ifsc: 'HDFC0000456'
     });
 

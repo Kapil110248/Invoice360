@@ -243,11 +243,11 @@ const Sidebar = ({ isOpen, role = 'superadmin', permissions = [], isAdmin = fals
     return (
         <div className={`sidebar ${isOpen ? 'open' : 'collapsed'}`}>
             <div className="logo">
-                <span className="logo-short">Z<span className="logo-accent">B</span></span>
+                <span className="logo-short">I<span className="logo-accent">360</span></span>
 
                 <span className="logo-full">
                     <span className="logo-main">
-                        Zirak <span className="logo-accent">Books</span>
+                        Invoice <span className="logo-accent">360</span>
                     </span>
                 </span>
             </div>

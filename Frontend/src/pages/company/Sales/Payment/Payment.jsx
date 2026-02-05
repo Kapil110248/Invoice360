@@ -52,7 +52,7 @@ const Payment = () => {
     }, []);
 
     const [companyDetails, setCompanyDetails] = useState({
-        name: 'Zirak Books', address: '', email: '', phone: '', logo: null, notes: '', showQr: true
+        name: 'Invoice 360', address: '', email: '', phone: '', logo: null, notes: '', showQr: true
     });
 
     const fetchCompanyDetails = async () => {
@@ -62,7 +62,7 @@ const Payment = () => {
                 const res = await companyService.getById(companyId);
                 const data = res.data;
                 setCompanyDetails({
-                    name: data.name || 'Zirak Books',
+                    name: data.name || 'Invoice 360',
                     address: data.address || '',
                     email: data.email || '',
                     phone: data.phone || '',
@@ -405,7 +405,7 @@ const Payment = () => {
                                             {companyDetails.logo ? (
                                                 <img src={companyDetails.logo} alt="Company Logo" className="invoice-logo" />
                                             ) : (
-                                                <div className="invoice-logo-placeholder">ZB</div>
+                                                <div className="invoice-logo-placeholder">I360</div>
                                             )}
                                             <h2 className="invoice-company-name">{companyDetails.name}</h2>
                                             <div className="invoice-company-details">
@@ -607,7 +607,7 @@ const Payment = () => {
                                             {companyDetails.logo ? (
                                                 <img src={companyDetails.logo} alt="Logo" className="company-logo-fixed" />
                                             ) : (
-                                                <div className="logo-placeholder-fixed">ZB</div>
+                                                <div className="logo-placeholder-fixed">I360</div>
                                             )}
                                             <div className="brand-details">
                                                 <h4 className="company-name">{companyDetails.name}</h4>
