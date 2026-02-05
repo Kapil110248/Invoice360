@@ -1,19 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FaCalendarAlt, FaUser, FaMoneyBillWave, FaEye, FaDownload,
   FaEnvelope, FaWhatsapp, FaPrint, FaTimes
 } from 'react-icons/fa';
+import payrollService from '../../../api/payrollService';
 import toast from 'react-hot-toast';
 import './Payroll.css';
 
 const PayslipReport = () => {
-  // Dummy Data
-  const [payslips, setPayslips] = useState([
-    { id: 1, slipNo: 'PS-001', name: 'John Doe', department: 'Engineering', month: 'January 2023', net: 'R4,500', mode: 'Bank', status: 'Paid', basic: 'R4,000', earnings: 'R500', deductions: 'R0' },
-    { id: 2, slipNo: 'PS-002', name: 'Jane Smith', department: 'Marketing', month: 'January 2023', net: 'R4,200', mode: 'Bank', status: 'Paid', basic: 'R3,800', earnings: 'R400', deductions: 'R0' },
-    { id: 3, slipNo: 'PS-003', name: 'Robert Johnson', department: 'Finance', month: 'February 2023', net: 'R5,000', mode: 'Cash', status: 'Pending', basic: 'R4,500', earnings: 'R1,000', deductions: 'R500' },
-    { id: 4, slipNo: 'PS-004', name: 'Emily Davis', department: 'HR', month: 'February 2023', net: 'R3,800', mode: 'Bank', status: 'Paid', basic: 'R3,500', earnings: 'R500', deductions: 'R200' },
-  ]);
+  const [payslips, setPayslips] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Modal State
   const [showViewModal, setShowViewModal] = useState(false);
@@ -21,10 +17,28 @@ const PayslipReport = () => {
 
   // Filters
   const [filters, setFilters] = useState({
-    month: '',
+    month: 'All Months',
     employee: '',
     status: 'All'
   });
+
+  useEffect(() => {
+    fetchPayslips();
+  }, [filters]);
+
+  const fetchPayslips = async () => {
+    try {
+      setLoading(true);
+      const response = await payrollService.getPayrollHistory(filters);
+      if (response.success) {
+        setPayslips(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching payslips:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handlers
   const handleView = (slip) => {
@@ -46,7 +60,7 @@ const PayslipReport = () => {
     const printContent = `
             <html>
                 <head>
-                    <title>Payslip - ${slip.name}</title>
+                    <title>Payslip - ${slip.employee.fullName}</title>
                     <style>
                         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
                         .payslip-container { max-width: 800px; margin: 0 auto; border: 1px solid #ccc; padding: 30px; border-radius: 8px; }
@@ -66,44 +80,41 @@ const PayslipReport = () => {
                 <body>
                     <div class="payslip-container">
                         <div class="header">
-                            <h1>COMPANY NAME</h1>
-                            <p>123 Business Street, Tech Park</p>
-                            <p>Payslip for the month of ${slip.month}</p>
+                            <h1>INVOICE 360</h1>
+                            <p>Payslip for the month of ${slip.month} ${slip.year}</p>
                         </div>
 
                         <div class="emp-info">
                             <div>
-                                <p><strong>Payslip No:</strong> ${slip.slipNo}</p>
-                                <p><strong>Employee Name:</strong> ${slip.name}</p>
-                                <p><strong>Department:</strong> ${slip.department}</p>
+                                <p><strong>Payslip No:</strong> PS-${String(slip.id).padStart(3, '0')}</p>
+                                <p><strong>Employee Name:</strong> ${slip.employee.fullName}</p>
+                                <p><strong>Department:</strong> ${slip.employee.department}</p>
                             </div>
                             <div style="text-align: right;">
                                 <p><strong>Payment Status:</strong> <span class="status-badge">${slip.status}</span></p>
-                                <p><strong>Payment Mode:</strong> ${slip.mode}</p>
+                                <p><strong>Basic Salary:</strong> R${slip.basicSalary.toLocaleString()}</p>
                             </div>
                         </div>
 
                         <div class="details-grid">
                             <div>
                                 <div class="section-title">Earnings</div>
-                                <div class="row"><span>Basic Salary</span> <span class="amount">${slip.basic}</span></div>
-                                <div class="row"><span>Allowances</span> <span class="amount">${slip.earnings}</span></div>
-                                <div class="row" style="font-weight: bold; margin-top: 10px; border-top: 1px solid #eee; padding-top: 5px;">
-                                    <span>Total Earnings</span> <span>R${parseInt(slip.basic.replace(/[^0-9]/g, '')) + parseInt(slip.earnings.replace(/[^0-9]/g, ''))}</span>
-                                </div>
+                                <div class="row"><span>Basic Salary</span> <span class="amount">R${slip.basicSalary.toLocaleString()}</span></div>
+                                ${slip.details.filter(d => d.type === 'EARNING').map(d => `
+                                     <div class="row"><span>${d.componentName}</span> <span class="amount">R${d.amount.toLocaleString()}</span></div>
+                                `).join('')}
                             </div>
                             <div>
                                 <div class="section-title">Deductions</div>
-                                <div class="row"><span>Tax & PF</span> <span class="amount">${slip.deductions}</span></div>
-                                <div class="row" style="font-weight: bold; margin-top: 10px; border-top: 1px solid #eee; padding-top: 5px;">
-                                    <span>Total Deductions</span> <span>${slip.deductions}</span>
-                                </div>
+                                ${slip.details.filter(d => d.type === 'DEDUCTION').map(d => `
+                                     <div class="row"><span>${d.componentName}</span> <span class="amount">R${d.amount.toLocaleString()}</span></div>
+                                `).join('')}
                             </div>
                         </div>
 
                         <div class="total-row">
                             <span>Net Payable Amount</span>
-                            <span>${slip.net}</span>
+                            <span>R${slip.netSalary.toLocaleString()}</span>
                         </div>
 
                         <div class="footer">
@@ -124,7 +135,6 @@ const PayslipReport = () => {
   };
 
   const handleDownload = (slip) => {
-    // Trigger the print logic which allows keeping as PDF
     handlePrint(slip);
     toast.success('Downloading payslip...');
   };
@@ -139,20 +149,23 @@ const PayslipReport = () => {
       <div className="pr-filter-container">
         <div className="pr-filter-item">
           <FaCalendarAlt className="pr-filter-icon" />
-          <input
-            type="text"
+          <select
             className="em-input pr-input-pl"
-            placeholder="Filter by Month"
             value={filters.month}
             onChange={(e) => setFilters({ ...filters, month: e.target.value })}
-          />
+          >
+            <option value="All Months">All Months</option>
+            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
         </div>
         <div className="pr-filter-item">
           <FaUser className="pr-filter-icon" />
           <input
             type="text"
             className="em-input pr-input-pl"
-            placeholder="Filter by Employee"
+            placeholder="Filter by Employee Name"
             value={filters.employee}
             onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
           />
@@ -173,69 +186,75 @@ const PayslipReport = () => {
 
       {/* Table */}
       <div className="em-table-container">
-        <table className="em-table">
-          <thead>
-            <tr>
-              <th>PAYSLIP NO</th>
-              <th>EMPLOYEE NAME</th>
-              <th>DEPARTMENT</th>
-              <th>MONTH</th>
-              <th>NET SALARY</th>
-              <th>PAYMENT MODE</th>
-              <th>STATUS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payslips.map(slip => (
-              <tr key={slip.id} className="em-row">
-                <td>{slip.slipNo}</td>
-                <td><strong>{slip.name}</strong></td>
-                <td>{slip.department}</td>
-                <td>{slip.month}</td>
-                <td><strong>{slip.net}</strong></td>
-                <td>{slip.mode}</td>
-                <td>
-                  <span className={slip.status === 'Paid' ? 'gp-status-paid' : 'gp-status-pending'}>
-                    {slip.status}
-                  </span>
-                </td>
-                <td>
-                  <div className="gp-action-row">
-                    <button
-                      className="gp-icon-btn gp-btn-eye"
-                      title="View"
-                      onClick={() => handleView(slip)}
-                    >
-                      <FaEye />
-                    </button>
-                    <button
-                      className="gp-icon-btn gp-btn-download"
-                      title="Download PDF"
-                      onClick={() => handleDownload(slip)}
-                    >
-                      <FaDownload />
-                    </button>
-                    <button
-                      className="gp-icon-btn gp-btn-mail"
-                      title="Email"
-                      onClick={() => handleEmail(slip.name)}
-                    >
-                      <FaEnvelope />
-                    </button>
-                    <button
-                      className="gp-icon-btn gp-btn-whatsapp"
-                      title="WhatsApp"
-                      onClick={() => handleWhatsapp(slip.name)}
-                    >
-                      <FaWhatsapp />
-                    </button>
-                  </div>
-                </td>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '20px' }}>Loading reports...</div>
+        ) : (
+          <table className="em-table">
+            <thead>
+              <tr>
+                <th>PAYSLIP NO</th>
+                <th>EMPLOYEE NAME</th>
+                <th>DEPARTMENT</th>
+                <th>MONTH</th>
+                <th>NET SALARY</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {payslips.length > 0 ? payslips.map(slip => (
+                <tr key={slip.id} className="em-row">
+                  <td>PS-{String(slip.id).padStart(3, '0')}</td>
+                  <td><strong>{slip.employee.fullName}</strong></td>
+                  <td>{slip.employee.department}</td>
+                  <td>{slip.month} {slip.year}</td>
+                  <td><strong>R{slip.netSalary.toLocaleString()}</strong></td>
+                  <td>
+                    <span className={slip.status === 'Paid' ? 'gp-status-paid' : 'gp-status-pending'}>
+                      {slip.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="gp-action-row">
+                      <button
+                        className="gp-icon-btn gp-btn-eye"
+                        title="View"
+                        onClick={() => handleView(slip)}
+                      >
+                        <FaEye />
+                      </button>
+                      <button
+                        className="gp-icon-btn gp-btn-download"
+                        title="Download PDF"
+                        onClick={() => handleDownload(slip)}
+                      >
+                        <FaDownload />
+                      </button>
+                      <button
+                        className="gp-icon-btn gp-btn-mail"
+                        title="Email"
+                        onClick={() => handleEmail(slip.employee.fullName)}
+                      >
+                        <FaEnvelope />
+                      </button>
+                      <button
+                        className="gp-icon-btn gp-btn-whatsapp"
+                        title="WhatsApp"
+                        onClick={() => handleWhatsapp(slip.employee.fullName)}
+                      >
+                        <FaWhatsapp />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center' }}>No reports found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* View Modal */}
@@ -243,13 +262,13 @@ const PayslipReport = () => {
         <div className="em-modal-overlay">
           <div className="em-modal-content" style={{ maxWidth: '500px' }}>
             <div className="em-modal-header">
-              <h3>Payslip {selectedPayslip.slipNo}</h3>
+              <h3>Payslip PS-{String(selectedPayslip.id).padStart(3, '0')}</h3>
               <button className="em-close-btn" onClick={() => setShowViewModal(false)}><FaTimes /></button>
             </div>
             <div className="em-modal-body">
               <div style={{ textAlign: 'center', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
-                <h4>{selectedPayslip.name}</h4>
-                <p style={{ color: '#666' }}>{selectedPayslip.department}</p>
+                <h4>{selectedPayslip.employee.fullName}</h4>
+                <p style={{ color: '#666' }}>{selectedPayslip.employee.department}</p>
                 <span className={selectedPayslip.status === 'Paid' ? 'gp-status-paid' : 'gp-status-pending'} style={{ marginTop: '10px' }}>
                   {selectedPayslip.status}
                 </span>
@@ -258,23 +277,23 @@ const PayslipReport = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Month:</span>
-                  <strong>{selectedPayslip.month}</strong>
+                  <strong>{selectedPayslip.month} {selectedPayslip.year}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Basic Pay:</span>
-                  <strong>{selectedPayslip.basic}</strong>
+                  <strong>R{selectedPayslip.basicSalary.toLocaleString()}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Earnings:</span>
-                  <span style={{ color: 'green' }}>+ {selectedPayslip.earnings}</span>
+                  <span style={{ color: 'green' }}>+ R{selectedPayslip.totalEarnings.toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Deductions:</span>
-                  <span style={{ color: 'red' }}>- {selectedPayslip.deductions}</span>
+                  <span style={{ color: 'red' }}>- R{selectedPayslip.totalDeductions.toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #ccc', fontSize: '18px' }}>
                   <strong>Net Pay:</strong>
-                  <strong>{selectedPayslip.net}</strong>
+                  <strong>R{selectedPayslip.netSalary.toLocaleString()}</strong>
                 </div>
               </div>
             </div>

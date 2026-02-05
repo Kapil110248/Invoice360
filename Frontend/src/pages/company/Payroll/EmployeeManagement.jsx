@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FaPlus, FaFileCsv, FaUsers, FaUserCheck, FaUserSlash, FaMoneyBillWave,
   FaEye, FaEdit, FaTrash, FaTimes
 } from 'react-icons/fa';
+import payrollService from '../../../api/payrollService';
 import './Payroll.css';
 
 const EmployeeManagement = () => {
-  // Dummy Data for Employees
-  const [employees, setEmployees] = useState([
-    { id: 1, empId: 'EMP001', name: 'John Doe', department: 'IT', designation: 'Software Engineer', joiningDate: '2022-01-15', salaryType: 'Monthly', baseSalary: 'R5,000', status: 'Active' },
-    { id: 2, empId: 'EMP002', name: 'Jane Smith', department: 'HR', designation: 'HR Manager', joiningDate: '2021-05-20', salaryType: 'Monthly', baseSalary: 'R6,000', status: 'Active' },
-    { id: 3, empId: 'EMP003', name: 'Robert Johnson', department: 'Finance', designation: 'Accountant', joiningDate: '2020-11-10', salaryType: 'Monthly', baseSalary: 'R4,500', status: 'Inactive' },
-  ]);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // View States
   const [showModal, setShowModal] = useState(false);
@@ -20,7 +17,7 @@ const EmployeeManagement = () => {
 
   // Form Data State
   const [formData, setFormData] = useState({
-    firstName: '', // Assuming Full Name splits or just one field. Image says 'Full Name'
+    employeeId: '',
     fullName: '',
     department: '',
     designation: '',
@@ -30,22 +27,37 @@ const EmployeeManagement = () => {
     bankAccount: '',
     ifsc: '',
     taxId: '',
-    status: true // Active toggle default
+    status: 'Active'
   });
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      setLoading(true);
+      const response = await payrollService.getAllEmployees();
+      if (response.success) {
+        setEmployees(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Derived Stats
   const totalEmployees = employees.length;
   const activeEmployees = employees.filter(e => e.status === 'Active').length;
   const inactiveEmployees = employees.filter(e => e.status === 'Inactive').length;
-  // Crude sum parsing for demo
-  const totalPayroll = employees.reduce((acc, curr) => {
-    const val = parseFloat(curr.baseSalary.replace(/[^0-9.-]+/g, ""));
-    return acc + (isNaN(val) ? 0 : val);
-  }, 0);
+  const totalPayrollLimit = employees.reduce((acc, curr) => acc + (parseFloat(curr.basicSalary) || 0), 0);
 
   // Handlers
   const handleAddNew = () => {
     setFormData({
+      employeeId: `EMP${String(employees.length + 1).padStart(3, '0')}`,
       fullName: '',
       department: '',
       designation: '',
@@ -55,7 +67,7 @@ const EmployeeManagement = () => {
       bankAccount: '',
       ifsc: '',
       taxId: '',
-      status: true
+      status: 'Active'
     });
     setIsEdit(false);
     setIsView(false);
@@ -65,16 +77,17 @@ const EmployeeManagement = () => {
   const handleEdit = (emp) => {
     setFormData({
       id: emp.id,
-      fullName: emp.name,
+      employeeId: emp.employeeId,
+      fullName: emp.fullName,
       department: emp.department,
       designation: emp.designation,
-      joiningDate: emp.joiningDate,
+      joiningDate: emp.joiningDate ? emp.joiningDate.split('T')[0] : '',
       salaryType: emp.salaryType,
-      basicSalary: emp.baseSalary.replace(/[^0-9.]/g, ''), // Strip currency for input
-      bankAccount: '1234567890', // Dummy
-      ifsc: 'BANK000123', // Dummy
-      taxId: 'TAX12345', // Dummy
-      status: emp.status === 'Active'
+      basicSalary: emp.basicSalary,
+      bankAccount: emp.bankAccount || '',
+      ifsc: emp.ifsc || '',
+      taxId: emp.taxId || '',
+      status: emp.status
     });
     setIsEdit(true);
     setIsView(false);
@@ -84,25 +97,33 @@ const EmployeeManagement = () => {
   const handleView = (emp) => {
     setFormData({
       id: emp.id,
-      fullName: emp.name,
+      employeeId: emp.employeeId,
+      fullName: emp.fullName,
       department: emp.department,
       designation: emp.designation,
-      joiningDate: emp.joiningDate,
+      joiningDate: emp.joiningDate ? emp.joiningDate.split('T')[0] : '',
       salaryType: emp.salaryType,
-      basicSalary: emp.baseSalary,
-      bankAccount: '1234567890',
-      ifsc: 'BANK000123',
-      taxId: 'TAX12345',
-      status: emp.status === 'Active'
+      basicSalary: emp.basicSalary,
+      bankAccount: emp.bankAccount || '',
+      ifsc: emp.ifsc || '',
+      taxId: emp.taxId || '',
+      status: emp.status
     });
     setIsEdit(false);
     setIsView(true);
     setShowModal(true);
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this employee?')) {
-      setEmployees(employees.filter(e => e.id !== id));
+      try {
+        const response = await payrollService.deleteEmployee(id);
+        if (response.success) {
+          setEmployees(employees.filter(e => e.id !== id));
+        }
+      } catch (error) {
+        alert('Error deleting employee');
+      }
     }
   };
 
@@ -113,43 +134,33 @@ const EmployeeManagement = () => {
 
   const handleToggleStatus = () => {
     if (!isView) {
-      setFormData({ ...formData, status: !formData.status });
+      setFormData({ ...formData, status: formData.status === 'Active' ? 'Inactive' : 'Active' });
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isView) {
       setShowModal(false);
       return;
     }
 
-    if (isEdit) {
-      setEmployees(employees.map(e => e.id === formData.id ? {
-        ...e,
-        name: formData.fullName,
-        department: formData.department,
-        designation: formData.designation,
-        joiningDate: formData.joiningDate,
-        salaryType: formData.salaryType,
-        baseSalary: `R${formData.basicSalary}`, // Add currency symbol back
-        status: formData.status ? 'Active' : 'Inactive'
-      } : e));
-    } else {
-      const newEmp = {
-        id: employees.length + 1,
-        empId: `EMP${String(employees.length + 1).padStart(3, '0')}`,
-        name: formData.fullName,
-        department: formData.department,
-        designation: formData.designation,
-        joiningDate: formData.joiningDate,
-        salaryType: formData.salaryType,
-        baseSalary: `R${formData.basicSalary}`,
-        status: formData.status ? 'Active' : 'Inactive'
-      };
-      setEmployees([...employees, newEmp]);
+    try {
+      if (isEdit) {
+        const response = await payrollService.updateEmployee(formData.id, formData);
+        if (response.success) {
+          setEmployees(employees.map(e => e.id === formData.id ? response.data : e));
+        }
+      } else {
+        const response = await payrollService.createEmployee(formData);
+        if (response.success) {
+          setEmployees([...employees, response.data]);
+        }
+      }
+      setShowModal(false);
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error saving employee');
     }
-    setShowModal(false);
   };
 
   return (
@@ -201,54 +212,62 @@ const EmployeeManagement = () => {
             <FaMoneyBillWave />
           </div>
           <div className="em-stat-info">
-            <h3>R{totalPayroll.toLocaleString()}</h3>
-            <p>Total Payroll</p>
+            <h3>R{totalPayrollLimit.toLocaleString()}</h3>
+            <p>Base Payroll</p>
           </div>
         </div>
       </div>
 
       {/* Employees Table */}
       <div className="em-table-container">
-        <table className="em-table">
-          <thead>
-            <tr>
-              <th>EMPLOYEE ID</th>
-              <th>FULL NAME</th>
-              <th>DEPARTMENT</th>
-              <th>DESIGNATION</th>
-              <th>JOINING DATE</th>
-              <th>SALARY TYPE</th>
-              <th>BASE SALARY</th>
-              <th>STATUS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {employees.map(emp => (
-              <tr key={emp.id} className="em-row">
-                <td>{emp.empId}</td>
-                <td><strong>{emp.name}</strong></td>
-                <td>{emp.department}</td>
-                <td>{emp.designation}</td>
-                <td>{emp.joiningDate}</td>
-                <td>{emp.salaryType}</td>
-                <td>{emp.baseSalary}</td>
-                <td>
-                  <span className={`em-status-badge ${emp.status === 'Active' ? 'em-status-active' : 'em-status-inactive'}`}>
-                    {emp.status}
-                  </span>
-                </td>
-                <td>
-                  <div className="em-actions">
-                    <button className="em-action-btn em-btn-view" onClick={() => handleView(emp)}><FaEye /></button>
-                    <button className="em-action-btn em-btn-edit" onClick={() => handleEdit(emp)}><FaEdit /></button>
-                    <button className="em-action-btn em-btn-delete" onClick={() => handleDelete(emp.id)}><FaTrash /></button>
-                  </div>
-                </td>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>Loading...</div>
+        ) : (
+          <table className="em-table">
+            <thead>
+              <tr>
+                <th>EMPLOYEE ID</th>
+                <th>FULL NAME</th>
+                <th>DEPARTMENT</th>
+                <th>DESIGNATION</th>
+                <th>JOINING DATE</th>
+                <th>SALARY TYPE</th>
+                <th>BASE SALARY</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {employees.length > 0 ? employees.map(emp => (
+                <tr key={emp.id} className="em-row">
+                  <td>{emp.employeeId}</td>
+                  <td><strong>{emp.fullName}</strong></td>
+                  <td>{emp.department}</td>
+                  <td>{emp.designation}</td>
+                  <td>{emp.joiningDate ? emp.joiningDate.split('T')[0] : 'N/A'}</td>
+                  <td>{emp.salaryType}</td>
+                  <td>R{emp.basicSalary?.toLocaleString()}</td>
+                  <td>
+                    <span className={`em-status-badge ${emp.status === 'Active' ? 'em-status-active' : 'em-status-inactive'}`}>
+                      {emp.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="em-actions">
+                      <button className="em-action-btn em-btn-view" onClick={() => handleView(emp)}><FaEye /></button>
+                      <button className="em-action-btn em-btn-edit" onClick={() => handleEdit(emp)}><FaEdit /></button>
+                      <button className="em-action-btn em-btn-delete" onClick={() => handleDelete(emp.id)}><FaTrash /></button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '20px' }}>No employees found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Add/Edit Modal */}
@@ -293,6 +312,8 @@ const EmployeeManagement = () => {
                       <option value="HR">HR</option>
                       <option value="Finance">Finance</option>
                       <option value="Sales">Sales</option>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Marketing">Marketing</option>
                     </select>
                   </div>
 
@@ -400,7 +421,7 @@ const EmployeeManagement = () => {
 
                 {/* Active Status Toggle */}
                 <div className="em-toggle-wrapper" onClick={handleToggleStatus}>
-                  <div className={`em-toggle ${formData.status ? 'active' : ''}`}>
+                  <div className={`em-toggle ${formData.status === 'Active' ? 'active' : ''}`}>
                     <div className="em-toggle-circle"></div>
                   </div>
                   <span className="em-toggle-label">Active Status</span>
