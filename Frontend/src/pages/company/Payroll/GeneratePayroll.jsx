@@ -1,19 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FaPlus, FaCheckCircle, FaFilter, FaCalendarAlt, FaBuilding,
   FaEye, FaEnvelope, FaWhatsapp, FaTrash, FaCheck, FaTimes,
   FaFileInvoiceDollar, FaDownload, FaPrint
 } from 'react-icons/fa';
+import payrollService from '../../../api/payrollService';
 import './Payroll.css';
 import toast from 'react-hot-toast';
 
 const GeneratePayroll = () => {
-  // Dummy Data
-  const [payrolls, setPayrolls] = useState([
-    { id: 1, name: 'Rahul Sharma', department: 'Engineering', month: 'January 2024', basic: 'R50,000', earnings: 'R15,000', deductions: 'R8,000', net: 'R57,000', status: 'Paid' },
-    { id: 2, name: 'Priya Singh', department: 'HR', month: 'January 2024', basic: 'R45,000', earnings: 'R12,000', deductions: 'R7,500', net: 'R49,500', status: 'Pending' },
-    { id: 3, name: 'Amit Patel', department: 'Finance', month: 'February 2024', basic: 'R55,000', earnings: 'R18,000', deductions: 'R9,000', net: 'R64,000', status: 'Paid' },
-  ]);
+  const [payrolls, setPayrolls] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Modal States
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -23,31 +21,44 @@ const GeneratePayroll = () => {
   // Filters State
   const [filters, setFilters] = useState({
     month: 'All Months',
-    department: 'All'
+    department: 'All',
+    year: new Date().getFullYear().toString()
   });
 
   // Form State for Generate Payroll
   const [genForm, setGenForm] = useState({
     month: 'January',
-    year: '2023',
+    year: new Date().getFullYear().toString(),
     selectAll: false,
     selectedEmployees: [], // ids
     remarks: ''
   });
 
-  // Dummy Employees for Selection
-  const employeesList = [
-    { id: 101, name: 'Rahul Sharma (Engineering)' },
-    { id: 102, name: 'Priya Singh (HR)' },
-    { id: 103, name: 'Amit Patel (Finance)' },
-    { id: 104, name: 'Sneha Reddy (Engineering)' },
-    { id: 105, name: 'Vikas Kumar (Marketing)' },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, [filters]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [historyRes, employeesRes] = await Promise.all([
+        payrollService.getPayrollHistory(filters),
+        payrollService.getAllEmployees()
+      ]);
+      if (historyRes.success) setPayrolls(historyRes.data);
+      if (employeesRes.success) setEmployees(employeesRes.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGenerateClick = () => {
+    const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date());
     setGenForm({
-      month: 'January',
-      year: '2023',
+      month: currentMonth,
+      year: new Date().getFullYear().toString(),
       selectAll: false,
       selectedEmployees: [],
       remarks: ''
@@ -56,7 +67,7 @@ const GeneratePayroll = () => {
   };
 
   const handleClearFilters = () => {
-    setFilters({ month: 'All Months', department: 'All' });
+    setFilters({ month: 'All Months', department: 'All', year: new Date().getFullYear().toString() });
   };
 
   // Selection Logic
@@ -66,7 +77,7 @@ const GeneratePayroll = () => {
       setGenForm(prev => ({
         ...prev,
         selectAll: true,
-        selectedEmployees: employeesList.map(emp => emp.id)
+        selectedEmployees: employees.map(emp => emp.id)
       }));
     } else {
       setGenForm(prev => ({
@@ -87,20 +98,32 @@ const GeneratePayroll = () => {
       return {
         ...prev,
         selectedEmployees: newSelection,
-        selectAll: newSelection.length === employeesList.length
+        selectAll: newSelection.length === employees.length
       };
     });
   };
 
   // Action Handlers
-  const handleGenerateSubmit = () => {
+  const handleGenerateSubmit = async () => {
     if (genForm.selectedEmployees.length === 0) {
       toast.error('Please select at least one employee');
       return;
     }
-    toast.success(`Payroll generated for ${genForm.selectedEmployees.length} employees!`);
-    setShowGenerateModal(false);
-    // In a real app, this would refresh the list
+    try {
+      const response = await payrollService.generatePayroll({
+        month: genForm.month,
+        year: genForm.year,
+        employeeIds: genForm.selectedEmployees,
+        remarks: genForm.remarks
+      });
+      if (response.success) {
+        toast.success(`Payroll generated for ${response.data.length} employees!`);
+        setShowGenerateModal(false);
+        fetchData();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error generating payroll');
+    }
   };
 
   const handleView = (payroll) => {
@@ -108,11 +131,16 @@ const GeneratePayroll = () => {
     setShowViewModal(true);
   };
 
-  const handleApprove = (id) => {
-    setPayrolls(prev => prev.map(p =>
-      p.id === id ? { ...p, status: 'Paid' } : p
-    ));
-    toast.success('Payroll approved successfully!');
+  const handleApprove = async (id) => {
+    try {
+      const response = await payrollService.updatePayrollStatus(id, 'Paid');
+      if (response.success) {
+        setPayrolls(prev => prev.map(p => p.id === id ? { ...p, status: 'Paid' } : p));
+        toast.success('Payroll approved successfully!');
+      }
+    } catch (error) {
+      toast.error('Error approving payroll');
+    }
   };
 
   const handleEmail = (name) => {
@@ -124,31 +152,26 @@ const GeneratePayroll = () => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this payroll entry?')) {
-      setPayrolls(payrolls.filter(p => p.id !== id));
-      toast.success('Payroll entry deleted');
-    }
+    // Delete endpoint not explicitly created yet, but can be added if needed
+    toast.error('Delete functionality for payroll entries is restricted.');
   };
 
-  const handleBulkApprove = () => {
-    const pendingCount = payrolls.filter(p => p.status === 'Pending').length;
-    if (pendingCount === 0) {
+  const handleBulkApprove = async () => {
+    const pendingPayrolls = payrolls.filter(p => p.status === 'Pending');
+    if (pendingPayrolls.length === 0) {
       toast('No pending payrolls to approve', { icon: 'ℹ️' });
       return;
     }
 
-    if (window.confirm(`Approve all ${pendingCount} pending payrolls?`)) {
-      setPayrolls(prev => prev.map(p => ({ ...p, status: 'Paid' })));
-      toast.success('All pending payrolls approved!');
+    if (window.confirm(`Approve all ${pendingPayrolls.length} pending payrolls?`)) {
+      try {
+        await Promise.all(pendingPayrolls.map(p => payrollService.updatePayrollStatus(p.id, 'Paid')));
+        fetchData();
+        toast.success('All pending payrolls approved!');
+      } catch (error) {
+        toast.error('Error in bulk approval');
+      }
     }
-  };
-
-  const handlePreview = () => {
-    toast('Calculating and generating preview...', { icon: '🧮' });
-  };
-
-  const handleDownloadAll = () => {
-    toast.success('Downloading all payslips...');
   };
 
   const handlePrint = () => {
@@ -157,7 +180,7 @@ const GeneratePayroll = () => {
     const printContent = `
             <html>
                 <head>
-                    <title>Payslip - ${selectedPayroll.name}</title>
+                    <title>Payslip - ${selectedPayroll.employee.fullName}</title>
                     <style>
                         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
                         .payslip-container { max-width: 800px; margin: 0 auto; border: 1px solid #ccc; padding: 30px; border-radius: 8px; }
@@ -177,44 +200,48 @@ const GeneratePayroll = () => {
                 <body>
                     <div class="payslip-container">
                         <div class="header">
-                            <h1>COMPANY NAME</h1>
-                            <p>123 Business Street, Tech Park</p>
-                            <p>Payslip for the month of ${selectedPayroll.month}</p>
+                            <h1>INVOICE 360</h1>
+                            <p>Premium Payroll Solutions</p>
+                            <p>Payslip for the month of ${selectedPayroll.month} ${selectedPayroll.year}</p>
                         </div>
 
                         <div class="emp-info">
                             <div>
-                                <p><strong>Employee Name:</strong> ${selectedPayroll.name}</p>
-                                <p><strong>Department:</strong> ${selectedPayroll.department}</p>
+                                <p><strong>Employee Name:</strong> ${selectedPayroll.employee.fullName}</p>
+                                <p><strong>Department:</strong> ${selectedPayroll.employee.department}</p>
+                                <p><strong>Employee ID:</strong> ${selectedPayroll.employee.employeeId}</p>
                             </div>
                             <div style="text-align: right;">
                                 <p><strong>Payment Status:</strong> <span class="status-badge">${selectedPayroll.status}</span></p>
-                                <p><strong>Date Generated:</strong> ${new Date().toLocaleDateString()}</p>
+                                <p><strong>Date Generated:</strong> ${new Date(selectedPayroll.createdAt).toLocaleDateString()}</p>
                             </div>
                         </div>
 
                         <div class="details-grid">
                             <div>
                                 <div class="section-title">Earnings</div>
-                                <div class="row"><span>Basic Salary</span> <span class="amount">${selectedPayroll.basic}</span></div>
-                                <div class="row"><span>Allowances</span> <span class="amount">${selectedPayroll.earnings.replace('R', '') - 0 > 0 ? 'Included' : '-'}</span></div>
+                                <div class="row"><span>Basic Salary</span> <span class="amount">R${selectedPayroll.basicSalary.toLocaleString()}</span></div>
+                                ${selectedPayroll.details.filter(d => d.type === 'EARNING').map(d => `
+                                    <div class="row"><span>${d.componentName}</span> <span class="amount">R${d.amount.toLocaleString()}</span></div>
+                                `).join('')}
                                 <div class="row" style="font-weight: bold; margin-top: 10px; border-top: 1px solid #eee; padding-top: 5px;">
-                                    <span>Total Earnings</span> <span>${selectedPayroll.earnings !== '-' ? 'R' + (parseInt(selectedPayroll.basic.replace(/[^0-9]/g, '')) + parseInt(selectedPayroll.earnings.replace(/[^0-9]/g, ''))).toLocaleString() : selectedPayroll.basic}</span>
+                                    <span>Total Earnings</span> <span>R${(selectedPayroll.basicSalary + selectedPayroll.totalEarnings).toLocaleString()}</span>
                                 </div>
                             </div>
                             <div>
                                 <div class="section-title">Deductions</div>
-                                <div class="row"><span>Tax & PF</span> <span class="amount">${selectedPayroll.deductions}</span></div>
-                                <div class="row"><span>Other Deductions</span> <span class="amount">-</span></div>
+                                ${selectedPayroll.details.filter(d => d.type === 'DEDUCTION').map(d => `
+                                    <div class="row"><span>${d.componentName}</span> <span class="amount">R${d.amount.toLocaleString()}</span></div>
+                                `).join('')}
                                 <div class="row" style="font-weight: bold; margin-top: 10px; border-top: 1px solid #eee; padding-top: 5px;">
-                                    <span>Total Deductions</span> <span>${selectedPayroll.deductions}</span>
+                                    <span>Total Deductions</span> <span>R${selectedPayroll.totalDeductions.toLocaleString()}</span>
                                 </div>
                             </div>
                         </div>
 
                         <div class="total-row">
                             <span>Net Payable Amount</span>
-                            <span>${selectedPayroll.net}</span>
+                            <span>R${selectedPayroll.netSalary.toLocaleString()}</span>
                         </div>
 
                         <div class="footer">
@@ -258,9 +285,22 @@ const GeneratePayroll = () => {
                 value={filters.month}
                 onChange={(e) => setFilters({ ...filters, month: e.target.value })}
               >
-                <option>All Months</option>
-                <option>January</option>
-                <option>February</option>
+                <option value="All Months">All Months</option>
+                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="gp-filter-group">
+              <label className="gp-filter-label"><FaCalendarAlt /> Year</label>
+              <select
+                className="ss-select"
+                value={filters.year}
+                onChange={(e) => setFilters({ ...filters, year: e.target.value })}
+              >
+                <option>2023</option>
+                <option>2024</option>
+                <option>2025</option>
               </select>
             </div>
             <div className="gp-filter-group">
@@ -270,10 +310,12 @@ const GeneratePayroll = () => {
                 value={filters.department}
                 onChange={(e) => setFilters({ ...filters, department: e.target.value })}
               >
-                <option>All</option>
-                <option>Engineering</option>
-                <option>HR</option>
-                <option>Finance</option>
+                <option value="All">All</option>
+                <option value="Engineering">Engineering</option>
+                <option value="HR">HR</option>
+                <option value="Finance">Finance</option>
+                <option value="IT">IT</option>
+                <option value="Marketing">Marketing</option>
               </select>
             </div>
             <button className="gp-btn-clear" onClick={handleClearFilters}>
@@ -288,82 +330,90 @@ const GeneratePayroll = () => {
 
       {/* Table */}
       <div className="em-table-container">
-        <table className="em-table">
-          <thead>
-            <tr>
-              <th style={{ width: '40px' }}><input type="checkbox" /></th>
-              <th>EMPLOYEE NAME</th>
-              <th>DEPARTMENT</th>
-              <th>MONTH</th>
-              <th>BASIC PAY</th>
-              <th>EARNINGS</th>
-              <th>DEDUCTIONS</th>
-              <th>NET PAY</th>
-              <th>PAYMENT STATUS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payrolls.map(pay => (
-              <tr key={pay.id} className="em-row">
-                <td><input type="checkbox" /></td>
-                <td><strong>{pay.name}</strong></td>
-                <td>{pay.department}</td>
-                <td>{pay.month}</td>
-                <td>{pay.basic}</td>
-                <td>{pay.earnings}</td>
-                <td>{pay.deductions}</td>
-                <td><strong>{pay.net}</strong></td>
-                <td>
-                  <span className={pay.status === 'Paid' ? 'gp-status-paid' : 'gp-status-pending'}>
-                    {pay.status}
-                  </span>
-                </td>
-                <td>
-                  <div className="gp-action-row">
-                    <button
-                      className="gp-icon-btn gp-btn-eye"
-                      title="View Details"
-                      onClick={() => handleView(pay)}
-                    >
-                      <FaEye />
-                    </button>
-                    {pay.status === 'Pending' && (
-                      <button
-                        className="gp-icon-btn gp-btn-check"
-                        title="Approve Payment"
-                        onClick={() => handleApprove(pay.id)}
-                      >
-                        <FaCheck />
-                      </button>
-                    )}
-                    <button
-                      className="gp-icon-btn gp-btn-mail"
-                      title="Email Payslip"
-                      onClick={() => handleEmail(pay.name)}
-                    >
-                      <FaEnvelope />
-                    </button>
-                    <button
-                      className="gp-icon-btn gp-btn-whatsapp"
-                      title="Send via WhatsApp"
-                      onClick={() => handleWhatsApp(pay.name)}
-                    >
-                      <FaWhatsapp />
-                    </button>
-                    <button
-                      className="gp-icon-btn gp-btn-trash"
-                      title="Delete Entry"
-                      onClick={() => handleDelete(pay.id)}
-                    >
-                      <FaTrash />
-                    </button>
-                  </div>
-                </td>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '20px' }}>Loading payroll data...</div>
+        ) : (
+          <table className="em-table">
+            <thead>
+              <tr>
+                <th style={{ width: '40px' }}><input type="checkbox" /></th>
+                <th>EMPLOYEE NAME</th>
+                <th>DEPARTMENT</th>
+                <th>MONTH</th>
+                <th>BASIC PAY</th>
+                <th>EARNINGS</th>
+                <th>DEDUCTIONS</th>
+                <th>NET PAY</th>
+                <th>PAYMENT STATUS</th>
+                <th>ACTIONS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {payrolls.length > 0 ? payrolls.map(pay => (
+                <tr key={pay.id} className="em-row">
+                  <td><input type="checkbox" /></td>
+                  <td><strong>{pay.employee.fullName}</strong></td>
+                  <td>{pay.employee.department}</td>
+                  <td>{pay.month} {pay.year}</td>
+                  <td>R{pay.basicSalary.toLocaleString()}</td>
+                  <td>R{pay.totalEarnings.toLocaleString()}</td>
+                  <td>R{pay.totalDeductions.toLocaleString()}</td>
+                  <td><strong>R{pay.netSalary.toLocaleString()}</strong></td>
+                  <td>
+                    <span className={pay.status === 'Paid' ? 'gp-status-paid' : 'gp-status-pending'}>
+                      {pay.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="gp-action-row">
+                      <button
+                        className="gp-icon-btn gp-btn-eye"
+                        title="View Details"
+                        onClick={() => handleView(pay)}
+                      >
+                        <FaEye />
+                      </button>
+                      {pay.status === 'Pending' && (
+                        <button
+                          className="gp-icon-btn gp-btn-check"
+                          title="Approve Payment"
+                          onClick={() => handleApprove(pay.id)}
+                        >
+                          <FaCheck />
+                        </button>
+                      )}
+                      <button
+                        className="gp-icon-btn gp-btn-mail"
+                        title="Email Payslip"
+                        onClick={() => handleEmail(pay.employee.fullName)}
+                      >
+                        <FaEnvelope />
+                      </button>
+                      <button
+                        className="gp-icon-btn gp-btn-whatsapp"
+                        title="Send via WhatsApp"
+                        onClick={() => handleWhatsApp(pay.employee.fullName)}
+                      >
+                        <FaWhatsapp />
+                      </button>
+                      <button
+                        className="gp-icon-btn gp-btn-trash"
+                        title="Delete Entry"
+                        onClick={() => handleDelete(pay.id)}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '20px' }}>No payroll records found for selected filters</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Generate Payroll Modal */}
@@ -376,29 +426,19 @@ const GeneratePayroll = () => {
             </div>
             <div className="em-modal-body">
               <div className="em-form-grid">
-                <div className="em-form-group">
-                  <label><FaCalendarAlt /> Month</label>
-                  <select
-                    className="em-select"
-                    value={genForm.month}
-                    onChange={(e) => setGenForm({ ...genForm, month: e.target.value })}
-                  >
-                    <option>January</option>
-                    <option>February</option>
-                    {/* ...other months */}
-                  </select>
-                </div>
-                <div className="em-form-group">
-                  <label><FaCalendarAlt /> Year</label>
-                  <select
-                    className="em-select"
-                    value={genForm.year}
-                    onChange={(e) => setGenForm({ ...genForm, year: e.target.value })}
-                  >
-                    <option>2023</option>
-                    <option>2024</option>
-                    <option>2025</option>
-                  </select>
+                <div className="em-form-group" style={{ gridColumn: 'span 2' }}>
+                  <label><FaCalendarAlt /> Select Payroll Period (Month & Year)</label>
+                  <input
+                    type="month"
+                    className="em-input"
+                    value={`${genForm.year}-${new Date(Date.parse(genForm.month + " 1, 2012")).getMonth() + 1 < 10 ? '0' : ''}${new Date(Date.parse(genForm.month + " 1, 2012")).getMonth() + 1}`}
+                    onChange={(e) => {
+                      const [year, month] = e.target.value.split('-');
+                      const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(year, month - 1));
+                      setGenForm({ ...genForm, year, month: monthName });
+                    }}
+                    required
+                  />
                 </div>
               </div>
 
@@ -415,7 +455,7 @@ const GeneratePayroll = () => {
                   <label htmlFor="selectAll" className="em-checkbox-label">Select All</label>
                 </div>
                 <div className="gp-employee-list-box">
-                  {employeesList.map(emp => (
+                  {employees.map(emp => (
                     <div key={emp.id} className="gp-list-item">
                       <input
                         type="checkbox"
@@ -424,7 +464,7 @@ const GeneratePayroll = () => {
                         onChange={() => handleEmployeeSelect(emp.id)}
                         id={`emp-${emp.id}`}
                       />
-                      <label htmlFor={`emp-${emp.id}`} style={{ marginBottom: 0, fontWeight: 400 }}>{emp.name}</label>
+                      <label htmlFor={`emp-${emp.id}`} style={{ marginBottom: 0, fontWeight: 400 }}>{emp.fullName} ({emp.department})</label>
                     </div>
                   ))}
                 </div>
@@ -438,15 +478,6 @@ const GeneratePayroll = () => {
                   value={genForm.remarks}
                   onChange={(e) => setGenForm({ ...genForm, remarks: e.target.value })}
                 ></textarea>
-              </div>
-
-              <div className="gp-modal-actions">
-                <button className="gp-btn-action-modal gp-btn-outline" onClick={handlePreview}>
-                  <FaFileInvoiceDollar /> Preview & Calculate
-                </button>
-                <button className="gp-btn-action-modal gp-btn-secondary-outline" onClick={handleDownloadAll}>
-                  <FaDownload /> Download All Payslips
-                </button>
               </div>
             </div>
 
@@ -468,8 +499,8 @@ const GeneratePayroll = () => {
             </div>
             <div className="em-modal-body">
               <div style={{ textAlign: 'center', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
-                <h4>{selectedPayroll.name}</h4>
-                <p style={{ color: '#666' }}>{selectedPayroll.department}</p>
+                <h4>{selectedPayroll.employee.fullName}</h4>
+                <p style={{ color: '#666' }}>{selectedPayroll.employee.department}</p>
                 <span className={selectedPayroll.status === 'Paid' ? 'gp-status-paid' : 'gp-status-pending'} style={{ marginTop: '10px' }}>
                   {selectedPayroll.status}
                 </span>
@@ -478,23 +509,23 @@ const GeneratePayroll = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Pay Period:</span>
-                  <strong>{selectedPayroll.month}</strong>
+                  <strong>{selectedPayroll.month} {selectedPayroll.year}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Basic Pay:</span>
-                  <strong>{selectedPayroll.basic}</strong>
+                  <strong>R{selectedPayroll.basicSalary.toLocaleString()}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Total Earnings:</span>
-                  <span style={{ color: 'green' }}>+ {selectedPayroll.earnings}</span>
+                  <span style={{ color: 'green' }}>+ R{selectedPayroll.totalEarnings.toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#666' }}>Total Deductions:</span>
-                  <span style={{ color: 'red' }}>- {selectedPayroll.deductions}</span>
+                  <span style={{ color: 'red' }}>- R{selectedPayroll.totalDeductions.toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #ccc', fontSize: '18px' }}>
                   <strong>Net Pay:</strong>
-                  <strong>{selectedPayroll.net}</strong>
+                  <strong>R{selectedPayroll.netSalary.toLocaleString()}</strong>
                 </div>
               </div>
             </div>

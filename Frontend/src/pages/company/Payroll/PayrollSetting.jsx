@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FaCog, FaFileInvoiceDollar, FaBuilding, FaUpload,
   FaCheck, FaSyncAlt, FaEye, FaSave
 } from 'react-icons/fa';
+import payrollService from '../../../api/payrollService';
 import toast from 'react-hot-toast';
 import './Payroll.css';
 
 const PayrollSettings = () => {
-  // State management for settings
   const [settings, setSettings] = useState({
     payCycle: 'Monthly',
     bankAccount: '',
@@ -21,8 +21,33 @@ const PayrollSettings = () => {
     digitalSignature: true,
     enableEmail: true,
     enableWhatsapp: false,
-    emailTemplate: 'Your payslip for {month} is now available.'
+    emailTemplate: 'Your payslip for {month} is now available.',
+    companyLogo: ''
   });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching payroll settings...');
+      const response = await payrollService.getSettings();
+      console.log('Settings response:', response);
+      if (response.success && response.data) {
+        // Merge with existing defaults if some fields are missing
+        setSettings(prev => ({ ...prev, ...response.data }));
+        console.log('Settings loaded successfully');
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      toast.error('Failed to load settings');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -32,15 +57,22 @@ const PayrollSettings = () => {
     });
   };
 
-  const handleSave = () => {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 1000)),
-      {
-        loading: 'Saving settings...',
-        success: 'Settings saved successfully!',
-        error: 'Could not save settings.',
+  const handleSave = async () => {
+    try {
+      console.log('Saving settings:', settings);
+      const response = await payrollService.updateSettings(settings);
+      console.log('Save response:', response);
+      if (response.success) {
+        toast.success('Settings saved successfully!');
+        // Refresh settings to ensure we have the latest data
+        await fetchSettings();
+      } else {
+        toast.error(response.message || 'Failed to save settings');
       }
-    );
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error(error.response?.data?.message || 'Could not save settings.');
+    }
   };
 
   const handleReset = () => {
@@ -58,7 +90,8 @@ const PayrollSettings = () => {
         digitalSignature: false,
         enableEmail: true,
         enableWhatsapp: false,
-        emailTemplate: 'Your payslip for {month} is now available.'
+        emailTemplate: 'Your payslip for {month} is now available.',
+        companyLogo: ''
       });
       toast.success('Settings reset to defaults');
     }
@@ -68,8 +101,9 @@ const PayrollSettings = () => {
     toast("Previewing Payslip Template...", {
       icon: '📄',
     });
-    // Logic to open a preview modal could go here
   };
+
+  if (loading) return <div className="em-container">Loading settings...</div>;
 
   return (
     <div className="em-container">
@@ -107,7 +141,7 @@ const PayrollSettings = () => {
                 name="bankAccount"
                 className="ps-input"
                 placeholder="Enter bank account number"
-                value={settings.bankAccount}
+                value={settings.bankAccount || ''}
                 onChange={handleChange}
               />
             </div>
@@ -141,7 +175,7 @@ const PayrollSettings = () => {
                 name="taxSlab"
                 className="ps-input"
                 placeholder="e.g., 10% for income up to R50,000"
-                value={settings.taxSlab}
+                value={settings.taxSlab || ''}
                 onChange={handleChange}
               />
             </div>
@@ -186,7 +220,39 @@ const PayrollSettings = () => {
             </div>
             <div className="ps-form-group">
               <label className="ps-label">Upload Company Logo</label>
-              <button className="ps-upload-btn"><FaUpload /> Upload</button>
+              <input
+                type="file"
+                id="logoUpload"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setSettings({ ...settings, companyLogo: reader.result });
+                      toast.success('Logo uploaded successfully!');
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+              <button
+                className="ps-upload-btn"
+                onClick={() => document.getElementById('logoUpload').click()}
+                type="button"
+              >
+                <FaUpload /> Upload
+              </button>
+              {settings.companyLogo && (
+                <div style={{ marginTop: '10px' }}>
+                  <img
+                    src={settings.companyLogo}
+                    alt="Company Logo"
+                    style={{ maxWidth: '150px', maxHeight: '80px', objectFit: 'contain', border: '1px solid #ddd', padding: '5px', borderRadius: '4px' }}
+                  />
+                </div>
+              )}
             </div>
             <div className="ps-form-group">
               <label className="ps-label">Select Layout</label>
@@ -207,16 +273,11 @@ const PayrollSettings = () => {
                 name="footerNotes"
                 className="ps-textarea"
                 placeholder="Enter footer notes for payslips"
-                value={settings.footerNotes}
+                value={settings.footerNotes || ''}
                 onChange={handleChange}
               ></textarea>
             </div>
-            <div className="em-checkbox-wrapper" onClick={() => setSettings({ ...settings, digitalSignature: !settings.digitalSignature })}>
-              <div className={`em-toggle ${settings.digitalSignature ? 'active' : ''}`} style={{ width: '24px', height: '14px', marginRight: '5px' }}>
-                {/* Mocking the checkbox look with existing toggle or just use standard checkbox if preferred, currently reusing toggle components for visuals */}
-              </div>
-
-              {/* Let's strictly use a checkbox for "Include Digital Signature" as per image which looks like a checkbox */}
+            <div className="em-checkbox-wrapper">
               <input
                 type="checkbox"
                 className="em-checkbox"
@@ -260,7 +321,7 @@ const PayrollSettings = () => {
                 name="emailTemplate"
                 className="ps-textarea"
                 placeholder="Enter message template"
-                value={settings.emailTemplate}
+                value={settings.emailTemplate || ''}
                 onChange={handleChange}
               ></textarea>
               <p className="ps-hint">Use {'{month}'} as a placeholder for the month name.</p>

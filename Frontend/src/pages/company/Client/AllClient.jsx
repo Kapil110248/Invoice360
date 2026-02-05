@@ -1,21 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaPlus, FaSearch, FaEye, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
+import clientService from '../../../api/clientService';
 import './Client.css';
 
 const AllClient = () => {
-  const [clients, setClients] = useState([
-    { id: 1, name: 'Acme Corp', contact: 'John Doe', email: 'john@acme.com', phone: '+91 9876543210', status: 'Active', type: 'Corporate', region: 'North' },
-    { id: 2, name: 'Beta Traders', contact: 'Jane Smith', email: 'jane@beta.com', phone: '+91 9123456780', status: 'Inactive', type: 'Individual', region: 'West' },
-    { id: 3, name: 'Gamma Enterprises', contact: 'Rajesh Kumar', email: 'rajesh@gamma.com', phone: '+91 9988776655', status: 'Active', type: 'Corporate', region: 'South' },
-  ]);
-
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
   const [isView, setIsView] = useState(false);
 
   // Filter State
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -23,11 +22,29 @@ const AllClient = () => {
     contactName: '',
     email: '',
     phone: '',
-    company: '',
+    companyName: '',
     address: '',
     gstin: '',
     status: 'Active'
   });
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      const response = await clientService.getAllClients();
+      if (response.success) {
+        setClients(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddClick = () => {
     setFormData({
@@ -35,7 +52,7 @@ const AllClient = () => {
       contactName: '',
       email: '',
       phone: '',
-      company: '',
+      companyName: '',
       address: '',
       gstin: '',
       status: 'Active'
@@ -45,16 +62,17 @@ const AllClient = () => {
     setShowModal(true);
   };
 
-  const handleEditClick = (client) => {
+  const handleEditClick = (e, client) => {
+    e.stopPropagation();
     setFormData({
       id: client.id,
-      clientName: client.name,
-      contactName: client.contact,
+      clientName: client.clientName,
+      contactName: client.contactName,
       email: client.email,
       phone: client.phone,
-      company: client.name,
-      address: '123 Business St',
-      gstin: '27AAAAA0000A1Z5',
+      companyName: client.companyName,
+      address: client.address,
+      gstin: client.gstin,
       status: client.status
     });
     setIsEdit(true);
@@ -62,16 +80,17 @@ const AllClient = () => {
     setShowModal(true);
   };
 
-  const handleViewClick = (client) => {
+  const handleViewClick = (e, client) => {
+    e.stopPropagation();
     setFormData({
       id: client.id,
-      clientName: client.name,
-      contactName: client.contact,
+      clientName: client.clientName,
+      contactName: client.contactName,
       email: client.email,
       phone: client.phone,
-      company: client.name,
-      address: '123 Business St',
-      gstin: '27AAAAA0000A1Z5',
+      companyName: client.companyName,
+      address: client.address,
+      gstin: client.gstin,
       status: client.status
     });
     setIsEdit(false);
@@ -79,10 +98,26 @@ const AllClient = () => {
     setShowModal(true);
   };
 
-  const handleDeleteClick = (id) => {
+  const handleDeleteClick = async (e, id) => {
+    e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this client?')) {
-      setClients(clients.filter(c => c.id !== id));
+      try {
+        const response = await clientService.deleteClient(id);
+        if (response.success) {
+          setClients(clients.filter(c => c.id !== id));
+        }
+      } catch (error) {
+        console.error('Error deleting client:', error);
+        alert('Failed to delete client');
+      }
     }
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('All Status');
+    setFromDate('');
+    setToDate('');
   };
 
   const handleChange = (e) => {
@@ -93,132 +128,176 @@ const AllClient = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isView) {
       setShowModal(false);
       return;
     }
 
-    if (isEdit) {
-      setClients(clients.map(c => c.id === formData.id ? {
-        ...c,
-        name: formData.clientName,
-        contact: formData.contactName,
-        email: formData.email,
-        phone: formData.phone,
-        status: formData.status
-      } : c));
-    } else {
-      const newClient = {
-        id: clients.length + 1,
-        name: formData.clientName,
-        contact: formData.contactName,
-        email: formData.email,
-        phone: formData.phone,
-        status: formData.status,
-        type: 'Corporate', // Default
-        region: 'North' // Default
-      };
-      setClients([...clients, newClient]);
+    try {
+      if (isEdit) {
+        const response = await clientService.updateClient(formData.id, formData);
+        if (response.success) {
+          setClients(clients.map(c => c.id === formData.id ? response.data : c));
+        }
+      } else {
+        const response = await clientService.createClient(formData);
+        if (response.success) {
+          setClients([response.data, ...clients]);
+        }
+      }
+      setShowModal(false);
+    } catch (error) {
+      console.error('Error saving client:', error);
+      alert(error.response?.data?.message || 'Failed to save client');
     }
-    setShowModal(false);
   };
 
   const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.contact.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || client.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesSearch =
+      (client.clientName?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (client.contactName?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (client.email?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (client.companyName?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesStatus = statusFilter === 'All Status' || client.status === statusFilter;
+
+    // Date filtering
+    let matchesDate = true;
+    const clientDate = new Date(client.createdAt).toISOString().split('T')[0];
+    if (fromDate && clientDate < fromDate) matchesDate = false;
+    if (toDate && clientDate > toDate) matchesDate = false;
+
+    return matchesSearch && matchesStatus && matchesDate;
   });
 
   return (
     <div className="c-client-container">
       <div className="c-client-header">
-        <h2>All Clients</h2>
+        <div>
+          <h2>Client</h2>
+          <p className="nc-header-subtitle">Manage your clients</p>
+        </div>
         <button className="c-client-add-btn" onClick={handleAddClick}>
           <FaPlus /> Add Client
         </button>
       </div>
 
-      <div className="c-client-filter-section">
-        <div className="c-client-search-bar">
-          <FaSearch />
-          <input
-            type="text"
-            placeholder="Search by name/contact"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="nc-filter-row">
+        <div className="nc-filter-group">
+          <label>Search Client</label>
+          <div className="nc-search-input-wrapper">
+            <input
+              type="text"
+              placeholder="Enter client name or contact"
+              className="nc-input"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="c-client-status-filter">
+        <div className="nc-filter-group">
+          <label>Status</label>
           <select
+            className="nc-input"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="All">Status: All</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
+            <option>All Status</option>
+            <option>Active</option>
+            <option>Inactive</option>
           </select>
+        </div>
+        <div className="nc-filter-group">
+          <label>From Date</label>
+          <input
+            type="date"
+            className="nc-input"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+          />
+        </div>
+        <div className="nc-filter-group">
+          <label>To Date</label>
+          <input
+            type="date"
+            className="nc-input"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+          />
+        </div>
+        <div className="nc-filter-group" style={{ display: 'flex', alignItems: 'flex-end', flex: '0 0 auto' }}>
+          <button className="nc-btn-clear" onClick={handleClearFilters}>
+            Clear
+          </button>
         </div>
       </div>
 
       <div className="c-client-table-container">
-        <table className="c-client-table">
-          <thead>
-            <tr>
-              <th>NAME</th>
-              <th>CONTACT</th>
-              <th>EMAIL</th>
-              <th>PHONE</th>
-              <th>STATUS</th>
-              <th>TYPE</th>
-              <th>REGION</th>
-              <th>ACTION</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredClients.length > 0 ? (
-              filteredClients.map(client => (
-                <tr key={client.id} className="c-client-row">
-                  <td><strong>{client.name}</strong></td>
-                  <td>{client.contact}</td>
-                  <td>{client.email}</td>
-                  <td>{client.phone}</td>
-                  <td>
-                    <span className={`c-client-status-badge ${client.status === 'Active' ? 'c-client-status-active' : 'c-client-status-inactive'}`}>
-                      {client.status}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`c-client-type-badge ${client.type === 'Corporate' ? 'c-client-type-corporate' : 'c-client-type-individual'}`}>
-                      {client.type}
-                    </span>
-                  </td>
-                  <td>{client.region}</td>
-                  <td>
-                    <div className="c-client-action-buttons">
-                      <button className="c-client-btn-icon c-client-btn-view" onClick={() => handleViewClick(client)}>
-                        <FaEye />
-                      </button>
-                      <button className="c-client-btn-icon c-client-btn-edit" onClick={() => handleEditClick(client)}>
-                        <FaEdit />
-                      </button>
-                      <button className="c-client-btn-icon c-client-btn-delete" onClick={() => handleDeleteClick(client.id)}>
-                        <FaTrash />
-                      </button>
-                    </div>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <div className="loading-spinner"></div>
+            <p>Loading clients...</p>
+          </div>
+        ) : (
+          <table className="c-client-table">
+            <thead>
+              <tr>
+                <th>CLIENT</th>
+                <th>CONTACT</th>
+                <th>CREATED</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredClients.length > 0 ? (
+                filteredClients.map(client => (
+                  <tr key={client.id} className="c-client-row">
+                    <td>
+                      <div className="nc-client-info">
+                        <h4>{client.clientName}</h4>
+                        <span>{client.companyName || 'N/A'}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="nc-contact-info">
+                        <div>{client.contactName}</div>
+                        <span>{client.email} &bull; {client.phone}</span>
+                      </div>
+                    </td>
+                    <td>{new Date(client.createdAt).toISOString().split('T')[0]}</td>
+                    <td>
+                      <span className={`c-client-status-badge ${client.status === 'Active' ? 'c-client-status-active' : 'c-client-status-inactive'}`}>
+                        {client.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="c-client-action-buttons">
+                        <button className="c-client-btn-icon c-client-btn-view" onClick={(e) => handleViewClick(e, client)} title="View">
+                          <FaEye />
+                        </button>
+                        <button className="c-client-btn-icon c-client-btn-edit" onClick={(e) => handleEditClick(e, client)} title="Edit">
+                          <FaEdit />
+                        </button>
+                        <button className="c-client-btn-icon c-client-btn-delete" onClick={(e) => handleDeleteClick(e, client.id)} title="Delete">
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                    No clients found. Click "Add Client" to create your first client.
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '20px' }}>No clients found</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {showModal && (
@@ -288,10 +367,10 @@ const AllClient = () => {
                   <label>Company</label>
                   <input
                     type="text"
-                    name="company"
+                    name="companyName"
                     className="c-client-form-input"
                     placeholder="Company / Organization"
-                    value={formData.company}
+                    value={formData.companyName}
                     onChange={handleChange}
                     readOnly={isView}
                   />

@@ -499,6 +499,52 @@
   color: var(--text-main);
 }
 
+/* New Salary Structure Button Styles */
+.ss-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ss-btn-add {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.ss-btn-add:hover {
+  background-color: #16a34a;
+  color: white;
+}
+
+.ss-btn-view {
+  background-color: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.ss-btn-view:hover {
+  background-color: #0284c7;
+  color: white;
+}
+
+.ss-btn-assign {
+  background-color: var(--primary);
+  color: white;
+  border: 1px solid var(--primary);
+}
+
+.ss-btn-assign:hover {
+  opacity: 0.9;
+}
+
 /* Supplemental styles for Add Component Modal */
 
 /* Input with Icon */
