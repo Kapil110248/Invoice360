@@ -8,20 +8,28 @@ const createEmployee = async (req, res) => {
     const companyId = req.user.companyId;
     const { employeeId, fullName, department, designation, joiningDate, salaryType, basicSalary, bankAccount, ifsc, taxId, status } = req.body;
 
+    console.log('--- Create Employee Debug ---');
+    console.log('Company ID:', companyId);
+    console.log('Request Body:', req.body);
+
+    if (!employeeId || !fullName || !joiningDate || basicSalary === undefined) {
+      return res.status(400).json({ success: false, message: 'Missing required fields: employeeId, fullName, joiningDate, and basicSalary are required.' });
+    }
+
     const employee = await prisma.employee.create({
       data: {
         employeeId,
         fullName,
-        department,
-        designation,
+        department: department || 'General',
+        designation: designation || 'Staff',
         joiningDate: new Date(joiningDate),
-        salaryType,
+        salaryType: salaryType || 'Monthly',
         basicSalary: parseFloat(basicSalary),
         bankAccount,
         ifsc,
         taxId,
         status: status || 'Active',
-        companyId
+        companyId: parseInt(companyId)
       }
     });
 
