@@ -3,56 +3,69 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-    console.log('🗑️  Deleting all existing users...');
-
-    // Delete all users first
-    await prisma.user.deleteMany({});
-    console.log('✅ All users deleted');
-
-    console.log('\n📝 Creating new users...\n');
+    console.log('📝 Creating/Updating seed users...\n');
 
     // Hash password for all users
     const hashedPassword = await bcrypt.hash('123', 10);
 
-    // 1. Create SUPERADMIN
-    const superadmin = await prisma.user.create({
-        data: {
+    // 1. Upsert SUPERADMIN
+    const superadmin = await prisma.user.upsert({
+        where: { email: 'superadmin@gmail.com' },
+        update: {
+            name: 'Super Admin',
+            password: hashedPassword,
+            role: 'SUPERADMIN'
+        },
+        create: {
             name: 'Super Admin',
             email: 'superadmin@gmail.com',
             password: hashedPassword,
             role: 'SUPERADMIN'
         }
     });
-    console.log('✅ Created SUPERADMIN:', {
+    console.log('✅ SUPERADMIN ready:', {
         id: superadmin.id,
         name: superadmin.name,
         email: superadmin.email,
         role: superadmin.role
     });
 
-    // 2. Create a company first for COMPANY role user
-    const company = await prisma.company.create({
-        data: {
-            name: 'Demo Company',
-            email: 'company@gmail.com',
-            phone: '+1 234 567 890',
-            address: '123 Business Street',
-            city: 'New York',
-            state: 'NY',
-            zip: '10001',
-            country: 'United States',
-            currency: 'USD'
-        }
+    // 2. Find or create a company for COMPANY role user
+    let company = await prisma.company.findFirst({
+        where: { email: 'company@gmail.com' }
     });
-    console.log('✅ Created Company:', {
+
+    if (!company) {
+        company = await prisma.company.create({
+            data: {
+                name: 'Demo Company',
+                email: 'company@gmail.com',
+                phone: '+1 234 567 890',
+                address: '123 Business Street',
+                city: 'New York',
+                state: 'NY',
+                zip: '10001',
+                country: 'United States',
+                currency: 'USD'
+            }
+        });
+    }
+    console.log('✅ Company ready:', {
         id: company.id,
         name: company.name,
         email: company.email
     });
 
-    // 3. Create COMPANY role user
-    const companyUser = await prisma.user.create({
-        data: {
+    // 3. Upsert COMPANY role user
+    const companyUser = await prisma.user.upsert({
+        where: { email: 'company@gmail.com' },
+        update: {
+            name: 'Company Admin',
+            password: hashedPassword,
+            role: 'COMPANY',
+            companyId: company.id
+        },
+        create: {
             name: 'Company Admin',
             email: 'company@gmail.com',
             password: hashedPassword,
@@ -60,7 +73,7 @@ async function main() {
             companyId: company.id
         }
     });
-    console.log('✅ Created COMPANY user:', {
+    console.log('✅ COMPANY user ready:', {
         id: companyUser.id,
         name: companyUser.name,
         email: companyUser.email,
@@ -68,9 +81,16 @@ async function main() {
         companyId: companyUser.companyId
     });
 
-    // 4. Create USER role user
-    const regularUser = await prisma.user.create({
-        data: {
+    // 4. Upsert USER role user
+    const regularUser = await prisma.user.upsert({
+        where: { email: 'user@gmail.com' },
+        update: {
+            name: 'Regular User',
+            password: hashedPassword,
+            role: 'USER',
+            companyId: company.id
+        },
+        create: {
             name: 'Regular User',
             email: 'user@gmail.com',
             password: hashedPassword,
@@ -78,7 +98,7 @@ async function main() {
             companyId: company.id
         }
     });
-    console.log('✅ Created USER:', {
+    console.log('✅ USER ready:', {
         id: regularUser.id,
         name: regularUser.name,
         email: regularUser.email,

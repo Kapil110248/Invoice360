@@ -46,6 +46,11 @@ const Login = () => {
         }
     };
 
+    const fillCredentials = (email, password) => {
+        setFormData({ email, password });
+        toast.success('Credentials filled!');
+    };
+
     return (
         <div className="login-container">
             <div className="login-wrapper">
@@ -107,6 +112,39 @@ const Login = () => {
                             {!loading && <ArrowRight size={18} />}
                         </button>
                     </form>
+
+                    {/* Demo Credentials Section */}
+                    <div className="credentials-section">
+                        <div className="credentials-header">
+                            <span className="credentials-badge">🔑 Demo Credentials</span>
+                        </div>
+                        <div className="credentials-grid">
+                            <div 
+                                className="credential-card superadmin-card"
+                                onClick={() => fillCredentials('superadmin@gmail.com', '123')}
+                            >
+                                <div className="credential-role">SUPER ADMIN</div>
+                                <div className="credential-email">superadmin@gmail.com</div>
+                                <div className="credential-password">Password: 123</div>
+                            </div>
+                            <div 
+                                className="credential-card company-card"
+                                onClick={() => fillCredentials('company@gmail.com', '123')}
+                            >
+                                <div className="credential-role">COMPANY</div>
+                                <div className="credential-email">company@gmail.com</div>
+                                <div className="credential-password">Password: 123</div>
+                            </div>
+                            <div 
+                                className="credential-card user-card"
+                                onClick={() => fillCredentials('user@gmail.com', '123')}
+                            >
+                                <div className="credential-role">USER</div>
+                                <div className="credential-email">user@gmail.com</div>
+                                <div className="credential-password">Password: 123</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* RIGHT SIDE – BRANDING */}
