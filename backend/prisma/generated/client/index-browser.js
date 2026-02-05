@@ -1006,6 +1006,108 @@ exports.Prisma.RoleScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ClientScalarFieldEnum = {
+  id: 'id',
+  clientName: 'clientName',
+  contactName: 'contactName',
+  email: 'email',
+  phone: 'phone',
+  companyName: 'companyName',
+  address: 'address',
+  gstin: 'gstin',
+  status: 'status',
+  companyId: 'companyId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.EmployeeScalarFieldEnum = {
+  id: 'id',
+  employeeId: 'employeeId',
+  fullName: 'fullName',
+  department: 'department',
+  designation: 'designation',
+  joiningDate: 'joiningDate',
+  salaryType: 'salaryType',
+  basicSalary: 'basicSalary',
+  bankAccount: 'bankAccount',
+  ifsc: 'ifsc',
+  taxId: 'taxId',
+  status: 'status',
+  companyId: 'companyId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.Salary_structureScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  companyId: 'companyId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.Salary_structure_componentScalarFieldEnum = {
+  id: 'id',
+  structureId: 'structureId',
+  name: 'name',
+  type: 'type',
+  calculationType: 'calculationType',
+  value: 'value'
+};
+
+exports.Prisma.Salary_structure_assignmentScalarFieldEnum = {
+  id: 'id',
+  employeeId: 'employeeId',
+  structureId: 'structureId',
+  companyId: 'companyId'
+};
+
+exports.Prisma.PayrollScalarFieldEnum = {
+  id: 'id',
+  employeeId: 'employeeId',
+  month: 'month',
+  year: 'year',
+  basicSalary: 'basicSalary',
+  totalEarnings: 'totalEarnings',
+  totalDeductions: 'totalDeductions',
+  netSalary: 'netSalary',
+  status: 'status',
+  remarks: 'remarks',
+  companyId: 'companyId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.Payroll_detailScalarFieldEnum = {
+  id: 'id',
+  payrollId: 'payrollId',
+  componentName: 'componentName',
+  type: 'type',
+  amount: 'amount'
+};
+
+exports.Prisma.Payroll_settingScalarFieldEnum = {
+  id: 'id',
+  companyId: 'companyId',
+  payCycle: 'payCycle',
+  bankAccount: 'bankAccount',
+  currency: 'currency',
+  taxSlab: 'taxSlab',
+  enablePF: 'enablePF',
+  enableInsurance: 'enableInsurance',
+  enableOtherDeductions: 'enableOtherDeductions',
+  layout: 'layout',
+  companyLogo: 'companyLogo',
+  footerNotes: 'footerNotes',
+  digitalSignature: 'digitalSignature',
+  enableEmail: 'enableEmail',
+  enableWhatsapp: 'enableWhatsapp',
+  emailTemplate: 'emailTemplate',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -1240,7 +1342,15 @@ exports.Prisma.ModelName = {
   warehouse: 'warehouse',
   voucher: 'voucher',
   voucheritem: 'voucheritem',
-  role: 'role'
+  role: 'role',
+  client: 'client',
+  employee: 'employee',
+  salary_structure: 'salary_structure',
+  salary_structure_component: 'salary_structure_component',
+  salary_structure_assignment: 'salary_structure_assignment',
+  payroll: 'payroll',
+  payroll_detail: 'payroll_detail',
+  payroll_setting: 'payroll_setting'
 };
 
 /**

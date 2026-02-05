@@ -126,6 +126,7 @@ model company {
   banktransaction      banktransaction[]
   category             category[]
   plan                 plan?                  @relation(fields: [planId], references: [id], map: "Company_planId_fkey")
+  client               client[]
   customer             customer[]
   deliverychallan      deliverychallan[]
   expenseentry         expenseentry[]
@@ -157,6 +158,11 @@ model company {
   warehouse            warehouse[]
   voucher              voucher[]
   role                 role[]
+  employee             employee[]
+  salary_structure     salary_structure[]
+  salary_structure_assignment salary_structure_assignment[]
+  payroll              payroll[]
+  payroll_setting      payroll_setting?
 
   @@index([planId], map: "Company_planId_fkey")
 }
@@ -1534,4 +1540,137 @@ model role {
 
   @@unique([companyId, name])
   @@index([companyId])
+}
+model client {
+  id          Int      @id @default(autoincrement())
+  clientName  String
+  contactName String?
+  email       String?
+  phone       String?
+  companyName String?
+  address     String?  @db.Text
+  gstin       String?
+  status      String   @default("Active")
+  companyId   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  company     company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model employee {
+  id              Int      @id @default(autoincrement())
+  employeeId      String
+  fullName        String
+  department      String
+  designation     String
+  joiningDate     DateTime
+  salaryType      String   @default("Monthly")
+  basicSalary     Float
+  bankAccount     String?
+  ifsc            String?
+  taxId           String?
+  status          String   @default("Active")
+  companyId       Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  company         company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salary_structure_assignment salary_structure_assignment?
+  payroll         payroll[]
+
+  @@index([companyId])
+}
+
+model salary_structure {
+  id              Int      @id @default(autoincrement())
+  name            String
+  companyId       Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  company         company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  components      salary_structure_component[]
+  assignments     salary_structure_assignment[]
+
+  @@index([companyId])
+}
+
+model salary_structure_component {
+  id              Int      @id @default(autoincrement())
+  structureId     Int
+  name            String
+  type            String   // EARNING, DEDUCTION
+  calculationType String   // FIXED, PERCENTAGE
+  value           Float
+  structure       salary_structure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+
+  @@index([structureId])
+}
+
+model salary_structure_assignment {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int      @unique
+  structureId     Int
+  companyId       Int
+  employee        employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  structure       salary_structure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  company         company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([structureId])
+  @@index([companyId])
+}
+
+model payroll {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int
+  month           String
+  year            Int
+  basicSalary     Float
+  totalEarnings   Float
+  totalDeductions Float
+  netSalary       Float
+  status          String   @default("Pending") // Pending, Paid
+  remarks         String?  @db.Text
+  companyId       Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  employee        employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company         company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  details         payroll_detail[]
+
+  @@index([employeeId])
+  @@index([companyId])
+}
+
+model payroll_detail {
+  id              Int      @id @default(autoincrement())
+  payrollId       Int
+  componentName   String
+  type            String   // EARNING, DEDUCTION
+  amount          Float
+  payroll         payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  @@index([payrollId])
+}
+
+model payroll_setting {
+  id                    Int      @id @default(autoincrement())
+  companyId             Int      @unique
+  payCycle              String   @default("Monthly")
+  bankAccount           String?
+  currency              String   @default("USD")
+  taxSlab               String?
+  enablePF              Boolean  @default(false)
+  enableInsurance       Boolean  @default(false)
+  enableOtherDeductions Boolean  @default(false)
+  layout                String   @default("Simple")
+  companyLogo           String?  @db.Text
+  footerNotes           String?  @db.Text
+  digitalSignature      Boolean  @default(false)
+  enableEmail           Boolean  @default(true)
+  enableWhatsapp        Boolean  @default(false)
+  emailTemplate         String?  @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now()) @updatedAt
+  company               company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
