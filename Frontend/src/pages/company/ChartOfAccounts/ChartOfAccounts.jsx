@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Search, RotateCcw, Plus, Eye, Edit2, Trash2, BookOpen, Wallet, ArrowDownCircle, ArrowUpCircle, PieChart, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import './ChartOfAccounts.css';
+import chartOfAccountsService from '../../../api/chartOfAccountsService';
+import GetCompanyId from '../../../api/GetCompanyId';
 
 // Stats Card Component
 const StatCard = ({ icon: Icon, title, amount, subtext, colorClass, iconBgClass, borderColor }) => (
@@ -21,6 +23,7 @@ const StatCard = ({ icon: Icon, title, amount, subtext, colorClass, iconBgClass,
 const ChartOfAccounts = () => {
     const navigate = useNavigate();
     const [chartData, setChartData] = useState([]);
+    const [accountTypes, setAccountTypes] = useState([]); // Groups & Subgroups
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -34,64 +37,158 @@ const ChartOfAccounts = () => {
     const [currentAccount, setCurrentAccount] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
-        type: 'ASSETS',
-        balance: 0,
-        description: ''
+        groupId: '',
+        subGroupId: '',
+        openingBalance: 0,
+        description: '',
+        type: '' // For UI tracking of Group Type (Assets/Liabilities etc)
     });
 
     useEffect(() => {
-        // Initial Dummy Data
-        const dummyData = [
-            { id: 101, name: 'Cash-in-hand', type: 'ASSETS', currentBalance: 5000, description: 'Petty cash for daily operations' },
-            { id: 102, name: 'Bank A/Cs', type: 'ASSETS', currentBalance: 25000, tag: 'Bank Account', description: 'Main business checking account' },
-            { id: 103, name: 'Sundry Debtors', type: 'ASSETS', currentBalance: 15000, description: 'Accounts receivable from customers' },
-            { id: 104, name: 'Fixed Assets', type: 'ASSETS', currentBalance: 100000, description: 'Long-term assets like equipment' },
-            { id: 201, name: 'Sundry Creditors', type: 'LIABILITIES', currentBalance: 12000, description: 'Accounts payable to vendors' },
-            { id: 202, name: 'Loans (Liability)', type: 'LIABILITIES', currentBalance: 50000, description: 'Business loans outstanding' },
-            { id: 301, name: 'Sales A/C', type: 'INCOME', currentBalance: 75000, description: 'Revenue from sales' },
-            { id: 302, name: 'Misc. Income', type: 'INCOME', currentBalance: 5000, description: 'Other income sources' },
-            { id: 401, name: 'Direct Expenses', type: 'EXPENSES', currentBalance: 20000, description: 'Cost of goods sold' },
-            { id: 402, name: 'Indirect Expenses', type: 'EXPENSES', currentBalance: 15000, description: 'Overhead expenses' },
-        ];
-        setChartData(dummyData);
-        setLoading(false);
+        fetchData();
+        fetchAccountTypes();
     }, []);
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const companyId = GetCompanyId();
+            // Append timestamp to force fresh fetch
+            const response = await chartOfAccountsService.getChartOfAccounts(companyId + `&_t=${Date.now()}`);
+
+            if (response.data.success) {
+                console.log("Fetched COA Data:", response.data.data);
+                const flatAccounts = transformData(response.data.data);
+                setChartData(flatAccounts);
+            }
+        } catch (error) {
+            console.error('Error fetching COA:', error);
+            // toast.error('Failed to load accounts');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchAccountTypes = async () => {
+        try {
+            const companyId = GetCompanyId();
+            const response = await chartOfAccountsService.getAccountTypes(companyId);
+            if (response.data.success) {
+                setAccountTypes(response.data.data);
+            }
+        } catch (error) {
+            console.error('Error fetching types:', error);
+        }
+    };
+
+    // Transform Nested Backend Data to Flat List for UI
+    const transformData = (groups) => {
+        let accounts = [];
+        groups.forEach(group => {
+            const groupType = group.type; // ASSETS, LIABILITIES, etc.
+            
+            // Direct Ledgers in Group
+            if (group.ledger) {
+                group.ledger.forEach(l => {
+                    accounts.push({
+                        ...l,
+                        type: groupType,
+                        groupName: group.name,
+                        groupId: group.id,
+                        tag: group.name
+                    });
+                });
+            }
+
+            // Ledgers in SubGroups
+            if (group.accountsubgroup) {
+                group.accountsubgroup.forEach(sub => {
+                    if (sub.ledger) {
+                        sub.ledger.forEach(l => {
+                            accounts.push({
+                                ...l,
+                                type: groupType, // Parent Group Type
+                                groupName: group.name,
+                                subGroupName: sub.name,
+                                groupId: group.id,
+                                subGroupId: sub.id,
+                                tag: sub.name // Use Subgroup as tag
+                            });
+                        });
+                    }
+                });
+            }
+        });
+        return accounts;
+    };
 
     // Helper functions
     const calculateTotal = (accounts) => accounts.reduce((acc, curr) => acc + (parseFloat(curr.currentBalance) || 0), 0).toFixed(2);
-    const formatCurrency = (amount) => 'R' + parseFloat(amount || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatCurrency = (amount) => 'R ' + parseFloat(amount || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const assets = chartData.filter(a => a.type === 'ASSETS');
     const liabilities = chartData.filter(a => a.type === 'LIABILITIES');
     const income = chartData.filter(a => a.type === 'INCOME');
     const expenses = chartData.filter(a => a.type === 'EXPENSES');
+    const equity = chartData.filter(a => a.type === 'EQUITY');
 
     // Filter Logic
-    const filterAccounts = (list) => list.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filterAccounts = (list) => list.filter(a => 
+        (a.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (a.tag || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     // --- Action Handlers ---
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData({ ...formData, [name]: value });
+        setFormData(prev => {
+            const updated = { ...prev, [name]: value };
+            
+            // Auto-set Group Type if Group Changed
+            if (name === 'groupId') {
+                const selectedGroup = accountTypes.find(g => g.groupId === parseInt(value));
+                if (selectedGroup) {
+                    // We assume the group name implies type somewhat, or we find it from somewhere else.
+                    // Ideally we should store 'type' in accountTypes. 
+                    // But for now, we reset subGroupId
+                    updated.subGroupId = '';
+                }
+            }
+            return updated;
+        });
     };
 
     // ADD
     const openAddModal = () => {
-        setFormData({ name: '', type: 'ASSETS', balance: 0, description: '' });
+        setFormData({ name: '', groupId: '', subGroupId: '', openingBalance: 0, description: '', type: '' });
         setShowAddModal(true);
     };
 
-    const handleCreate = () => {
-        if (!formData.name) return toast.error('Account Name is required');
-        const newAccount = {
-            id: Date.now(),
-            ...formData,
-            currentBalance: parseFloat(formData.balance)
-        };
-        setChartData([...chartData, newAccount]);
-        toast.success('Account created successfully');
-        setShowAddModal(false);
+    const handleCreate = async () => {
+        if (!formData.name || !formData.groupId) return toast.error('Account Name and Group are required');
+        
+        try {
+            const companyId = GetCompanyId();
+            const payload = {
+                name: formData.name,
+                groupId: parseInt(formData.groupId),
+                subGroupId: formData.subGroupId ? parseInt(formData.subGroupId) : null,
+                openingBalance: parseFloat(formData.openingBalance),
+                description: formData.description,
+                companyId
+            };
+            
+            const response = await chartOfAccountsService.createLedger(payload);
+            if (response.data.success) {
+                toast.success('Account created successfully');
+                setShowAddModal(false);
+                fetchData();
+            }
+        } catch (error) {
+            console.error("Create Error:", error);
+            toast.error(error.response?.data?.message || 'Failed to create account');
+        }
     };
 
     // EDIT
@@ -99,22 +196,45 @@ const ChartOfAccounts = () => {
         setCurrentAccount(account);
         setFormData({
             name: account.name,
-            type: account.type,
-            balance: account.currentBalance,
-            description: account.description || ''
+            groupId: account.groupId || '', // This needs to be preserved in transformData
+            subGroupId: account.subGroupId || '',
+            openingBalance: account.openingBalance || 0, // Should we edit opening balance? Maybe yes.
+            description: account.description || '',
+            type: account.type
         });
         setShowEditModal(true);
     };
 
-    const handleUpdate = () => {
-        if (!formData.name) return toast.error('Account Name is required');
-        setChartData(chartData.map(acc => acc.id === currentAccount.id ? {
-            ...acc,
-            ...formData,
-            currentBalance: parseFloat(formData.balance)
-        } : acc));
-        toast.success('Account updated successfully');
-        setShowEditModal(false);
+    const handleUpdate = async () => {
+        if (!formData.name || !formData.groupId) return toast.error('Account Name and Group are required');
+
+        console.log('Update Payload Debug:', {
+            id: currentAccount.id,
+            formData,
+            parsedGroupId: parseInt(formData.groupId),
+            parsedSubGroupId: formData.subGroupId ? parseInt(formData.subGroupId) : null
+        });
+
+        try {
+            const companyId = GetCompanyId();
+            const payload = {
+                name: formData.name,
+                groupId: parseInt(formData.groupId),
+                subGroupId: formData.subGroupId ? parseInt(formData.subGroupId) : null,
+                openingBalance: parseFloat(formData.openingBalance),
+                description: formData.description
+            };
+
+            const response = await chartOfAccountsService.updateLedger(currentAccount.id, payload, companyId);
+            if (response.data.success) {
+                toast.success('Account updated successfully');
+                setShowEditModal(false);
+                fetchData();
+            }
+        } catch (error) {
+            console.error("Update Error:", error);
+            toast.error(error.response?.data?.message || 'Failed to update account');
+        }
     };
 
     // DELETE
@@ -123,10 +243,17 @@ const ChartOfAccounts = () => {
         setShowDeleteModal(true);
     };
 
-    const handleDelete = () => {
-        setChartData(chartData.filter(acc => acc.id !== currentAccount.id));
-        toast.success('Account deleted successfully');
-        setShowDeleteModal(false);
+    const handleDelete = async () => {
+        try {
+            const companyId = GetCompanyId();
+            await chartOfAccountsService.deleteLedger(currentAccount.id, companyId);
+            toast.success('Account deleted successfully');
+            setShowDeleteModal(false);
+            fetchData();
+        } catch (error) {
+            console.error("Delete Error:", error);
+            toast.error(error.response?.data?.message || 'Failed to delete account');
+        }
     };
 
     // VIEW
@@ -207,6 +334,7 @@ const ChartOfAccounts = () => {
                 <StatCard icon={ArrowDownCircle} title="Liabilities" amount={formatCurrency(calculateTotal(liabilities))} subtext={`${liabilities.length} accounts`} borderColor="stat-card-liabilities" iconBgClass="icon-bg-liabilities" />
                 <StatCard icon={PieChart} title="Income" amount={formatCurrency(calculateTotal(income))} subtext={`${income.length} accounts`} borderColor="stat-card-income" iconBgClass="icon-bg-income" />
                 <StatCard icon={Building2} title="Expenses" amount={formatCurrency(calculateTotal(expenses))} subtext={`${expenses.length} accounts`} borderColor="stat-card-expenses" iconBgClass="icon-bg-expenses" />
+                <StatCard icon={BookOpen} title="Equity" amount={formatCurrency(calculateTotal(equity))} subtext={`${equity.length} accounts`} borderColor="stat-card-equity" iconBgClass="icon-bg-equity" />
             </div>
 
             {/* Action/Filter Bar */}
@@ -235,17 +363,21 @@ const ChartOfAccounts = () => {
                     <div>BALANCE</div>
                     <div>ACTIONS</div>
                 </div>
-
-                <AccountSection title="Assets" accounts={filterAccounts(assets)} colorClass="#22c55e" icon={Wallet} totalColorClass="#16a34a" />
-                <AccountSection title="Liabilities" accounts={filterAccounts(liabilities)} colorClass="#f43f5e" icon={ArrowDownCircle} totalColorClass="#16a34a" />
-                <AccountSection title="Income" accounts={filterAccounts(income)} colorClass="#3b82f6" icon={PieChart} totalColorClass="#16a34a" />
-                <AccountSection title="Expenses" accounts={filterAccounts(expenses)} colorClass="#f97316" icon={Building2} totalColorClass="#16a34a" />
+                
+                {loading ? <div style={{padding: '20px', textAlign: 'center'}}>Loading...</div> : (
+                    <>
+                        <AccountSection title="Assets" accounts={filterAccounts(assets)} colorClass="#22c55e" icon={Wallet} totalColorClass="#16a34a" />
+                        <AccountSection title="Liabilities" accounts={filterAccounts(liabilities)} colorClass="#f43f5e" icon={ArrowDownCircle} totalColorClass="#16a34a" />
+                        <AccountSection title="Income" accounts={filterAccounts(income)} colorClass="#3b82f6" icon={PieChart} totalColorClass="#16a34a" />
+                        <AccountSection title="Expenses" accounts={filterAccounts(expenses)} colorClass="#f97316" icon={Building2} totalColorClass="#16a34a" />
+                        <AccountSection title="Equity" accounts={filterAccounts(equity)} colorClass="#8b5cf6" icon={BookOpen} totalColorClass="#16a34a" />
+                    </>
+                )}
 
             </div>
 
             {/* Footer Legend */}
             <div className="Charts-of-Account-footer-legend">
-                {/* ... existing legend ... */}
                 <div className="Charts-of-Account-legend-title">
                     <PieChart size={20} className="text-blue-500" />
                     Accounts Overview
@@ -255,7 +387,6 @@ const ChartOfAccounts = () => {
                         <h4 style={{ color: '#22c55e' }}><span className="Charts-of-Account-dot" style={{ backgroundColor: '#22c55e' }}></span> Assets</h4>
                         <p className="Charts-of-Account-legend-text">Resources owned by the business that provide future economic benefits.</p>
                     </div>
-                    {/* ... other legend items ... */}
                     <div className="Charts-of-Account-legend-item">
                         <h4 style={{ color: '#f43f5e' }}><span className="Charts-of-Account-dot" style={{ backgroundColor: '#f43f5e' }}></span> Liabilities</h4>
                         <p className="Charts-of-Account-legend-text">Obligations and debts owed to creditors and other parties.</p>
@@ -263,6 +394,10 @@ const ChartOfAccounts = () => {
                     <div className="Charts-of-Account-legend-item">
                         <h4 style={{ color: '#3b82f6' }}><span className="Charts-of-Account-dot" style={{ backgroundColor: '#3b82f6' }}></span> Income & Expenses</h4>
                         <p className="Charts-of-Account-legend-text">Track revenue generation and operational costs for better financial management.</p>
+                    </div>
+                    <div className="Charts-of-Account-legend-item">
+                        <h4 style={{ color: '#8b5cf6' }}><span className="Charts-of-Account-dot" style={{ backgroundColor: '#8b5cf6' }}></span> Equity</h4>
+                        <p className="Charts-of-Account-legend-text">Owner's residual interest in the assets of the business.</p>
                     </div>
                 </div>
             </div>
@@ -282,18 +417,33 @@ const ChartOfAccounts = () => {
                                 <label className="Charts-of-Account-form-label">Account Name</label>
                                 <input type="text" className="Charts-of-Account-form-input" name="name" value={formData.name} onChange={handleInputChange} placeholder="e.g. Petty Cash" />
                             </div>
+                            
                             <div className="Charts-of-Account-form-group">
-                                <label className="Charts-of-Account-form-label">Account Type</label>
-                                <select className="Charts-of-Account-form-select" name="type" value={formData.type} onChange={handleInputChange}>
-                                    <option value="ASSETS">Assets</option>
-                                    <option value="LIABILITIES">Liabilities</option>
-                                    <option value="INCOME">Income</option>
-                                    <option value="EXPENSES">Expenses</option>
+                                <label className="Charts-of-Account-form-label">Account Group (Type)</label>
+                                <select className="Charts-of-Account-form-select" name="groupId" value={formData.groupId} onChange={handleInputChange}>
+                                    <option value="">Select Group</option>
+                                    {accountTypes.map(group => (
+                                        <option key={group.groupId} value={group.groupId}>{group.groupName}</option>
+                                    ))}
                                 </select>
                             </div>
+
+                             {/* Show Sub-Group if selected Group has sub-groups */}
+                             {formData.groupId && accountTypes.find(g => g.groupId === parseInt(formData.groupId))?.accounts?.length > 0 && (
+                                <div className="Charts-of-Account-form-group">
+                                    <label className="Charts-of-Account-form-label">Sub Group (Optional)</label>
+                                    <select className="Charts-of-Account-form-select" name="subGroupId" value={formData.subGroupId} onChange={handleInputChange}>
+                                        <option value="">Select Sub-Group</option>
+                                        {accountTypes.find(g => g.groupId === parseInt(formData.groupId)).accounts.map(sub => (
+                                             <option key={sub.accountTypeId} value={sub.accountTypeId}>{sub.accountTypeName}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             <div className="Charts-of-Account-form-group">
-                                <label className="Charts-of-Account-form-label">Current Balance</label>
-                                <input type="number" className="Charts-of-Account-form-input" name="balance" value={formData.balance} onChange={handleInputChange} placeholder="0.00" />
+                                <label className="Charts-of-Account-form-label">Opening Balance</label>
+                                <input type="number" className="Charts-of-Account-form-input" name="openingBalance" value={formData.openingBalance} onChange={handleInputChange} placeholder="0.00" />
                             </div>
                             <div className="Charts-of-Account-form-group">
                                 <label className="Charts-of-Account-form-label">Description</label>
@@ -348,12 +498,18 @@ const ChartOfAccounts = () => {
                                     <div className="Charts-of-Account-stat-title">{currentAccount?.type}</div>
                                 </div>
                                 <div>
+                                    <label className="Charts-of-Account-stat-sub">Group</label>
+                                    <div className="Charts-of-Account-stat-title">{currentAccount?.groupName || '-'}</div>
+                                </div>
+                                {currentAccount?.subGroupName && (
+                                     <div>
+                                        <label className="Charts-of-Account-stat-sub">Sub Group</label>
+                                        <div className="Charts-of-Account-stat-title">{currentAccount?.subGroupName}</div>
+                                    </div>
+                                )}
+                                <div>
                                     <label className="Charts-of-Account-stat-sub">Balance</label>
                                     <div className="Charts-of-Account-stat-title" style={{ color: '#16a34a' }}>{formatCurrency(currentAccount?.currentBalance)}</div>
-                                </div>
-                                <div>
-                                    <label className="Charts-of-Account-stat-sub">Tag</label>
-                                    <div className="Charts-of-Account-stat-title">{currentAccount?.tag || '-'}</div>
                                 </div>
                                 <div style={{ gridColumn: '1 / -1' }}>
                                     <label className="Charts-of-Account-stat-sub">Description</label>

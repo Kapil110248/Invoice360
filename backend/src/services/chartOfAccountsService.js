@@ -624,36 +624,55 @@ const getAllLedgers = async (companyId) => {
 // Update Ledger
 const updateLedger = async (id, companyId, data) => {
     try {
-        const ledger = await prisma.ledger.updateMany({
+        // 1. Verify ownership and existence
+        const existingLedger = await prisma.ledger.findFirst({
             where: {
                 id: parseInt(id),
                 companyId: companyId
+            }
+        });
+
+        if (!existingLedger) {
+            throw new Error('Ledger not found');
+        }
+
+        // 2. Calculate New Current Balance if Opening Balance Changed
+        let newCurrentBalance = existingLedger.currentBalance;
+        if (data.openingBalance !== undefined && data.openingBalance !== null) {
+            const oldOpening = parseFloat(existingLedger.openingBalance) || 0;
+            const newOpening = parseFloat(data.openingBalance) || 0;
+            
+            if (oldOpening !== newOpening) {
+                const diff = newOpening - oldOpening;
+                newCurrentBalance = (parseFloat(existingLedger.currentBalance) || 0) + diff;
+            }
+        }
+
+        // 3. Perform Update using Unique ID
+        const ledger = await prisma.ledger.update({
+            where: {
+                id: parseInt(id)
             },
             data: {
                 name: data.name,
                 groupId: data.groupId,
                 subGroupId: data.subGroupId,
                 openingBalance: data.openingBalance,
+                currentBalance: newCurrentBalance, // Update current balance
                 isControlAccount: data.isControlAccount,
                 isEnabled: data.isEnabled,
                 description: data.description,
                 parentLedgerId: data.parentLedgerId ? parseInt(data.parentLedgerId) : null,
                 updatedAt: new Date()
-            }
-        });
-
-        if (ledger.count === 0) {
-            throw new Error('Ledger not found or no changes made');
-        }
-
-        return await prisma.ledger.findUnique({
-            where: { id: parseInt(id) },
+            },
             include: {
                 accountgroup: true,
                 accountsubgroup: true,
                 ledger: true
             }
         });
+
+        return ledger;
     } catch (error) {
         console.error('Error updating ledger:', error);
         throw error;
