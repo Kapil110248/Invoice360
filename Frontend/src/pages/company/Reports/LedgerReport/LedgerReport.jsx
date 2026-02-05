@@ -34,13 +34,14 @@ const LedgerReport = () => {
     // Helper to flatten COA for dropdown
     const flattenLedgers = (coaData) => {
         let flattened = [];
-        const traverse = (groups) => {
+        const traverse = (groups, parentType = null) => {
             groups.forEach(group => {
+                const currentType = group.type || parentType;
                 if (group.ledger) {
-                    group.ledger.forEach(ledger => flattened.push({ ...ledger, groupName: group.name }));
+                    group.ledger.forEach(ledger => flattened.push({ ...ledger, groupName: group.name, groupType: currentType }));
                 }
                 if (group.accountsubgroup) {
-                    traverse(group.accountsubgroup);
+                    traverse(group.accountsubgroup, currentType);
                 }
             });
         };
@@ -138,78 +139,117 @@ const LedgerReport = () => {
     };
 
     // Process transactions to add running balance
-    // Backend might return them sorted, but we ensure sorting by Date
     const processedTransactions = React.useMemo(() => {
-        if (!transactions || !selectedAccount) return [];
+        if (!ledgers || !selectedAccount) return [];
 
-        // 1. Sort all transactions by date
+        // Find current ledger for opening balance
+        const currentLedger = ledgers.find(l => l.id == selectedAccount);
+        
+        let openingBalance = 0;
+        if (currentLedger) {
+            const rawOpening = parseFloat(currentLedger.openingBalance) || 0;
+            // Determine if account is naturally Credit (Liabilities, Equity, Income)
+            // If so, treat positive Opening Balance as Credit (negative for running balance calc)
+            // Note: We need to verify if 'groupType' is successfully populated for nested subgroups.
+            // If not, we might default to Dr.
+            // For now, let's assume direct groups work.
+            // CAUTION: flattenLedgers as written above only captures type from immediate parent if it has it.
+            // If traverse is recursive, we need to pass type down.
+            
+            // Let's rely on ChartOfAccounts.jsx logic which seemed to work.
+            // Actually, let's fix flatten logic first properly in the implementation below.
+            
+            const isCreditNature = ['LIABILITIES', 'EQUITY', 'INCOME'].includes(currentLedger.groupType);
+            openingBalance = isCreditNature ? -rawOpening : rawOpening;
+        }
+
+        let runningBalance = openingBalance;
+        const resultRows = [];
+        
         const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        const startDate = dateRange.startDate ? new Date(dateRange.startDate) : null;
+        const endDate = dateRange.endDate ? new Date(dateRange.endDate) : null;
+        if (endDate) endDate.setHours(23, 59, 59, 999);
 
-        // 2. Calculate Running Balance on entire history
-        let runningBalance = 0;
+        // Filter transactions BEFORE start date to add to opening balance
+        let balanceBroughtForward = openingBalance;
+        
+        // Separate transactions into "Previous" (for B/F calc) and "Current" (for display)
+        const displayTxns = [];
 
-        const withBalance = sorted.map(txn => {
+        sorted.forEach(txn => {
+            const txnDate = new Date(txn.date);
+            
             const isDebit = txn.debitLedgerId === parseInt(selectedAccount);
             const isCredit = txn.creditLedgerId === parseInt(selectedAccount);
-
-            // Amount logic
             const debit = isDebit ? txn.amount : 0;
             const credit = isCredit ? txn.amount : 0;
+            
+            // Standard Accounting: Asset/Exp (Dr +), Liab/Inc (Cr +).
+            // But usually Ledger Report is simple Dr - Cr running balance.
+            // Let's assume Dr is positive impact on "Debit Balance".
+            const netChange = debit - credit;
 
-            // Running Balance: Assumes standard asset/expense nature (Dr + / Cr -).
-            // If the account is Liability/Income, it should ideally be (Cr + / Dr -).
-            // However, typical ledger view shows Dr/Cr balance. 
-            // Let's implement generic: Balance = Balance + Debit - Credit.
-            // If final balance is negative, it's a Credit Balance.
-            runningBalance = runningBalance + debit - credit;
+            if (startDate && txnDate < startDate) {
+                balanceBroughtForward += netChange;
+            } else if (!endDate || txnDate <= endDate) {
+                displayTxns.push({ ...txn, debit, credit, netChange });
+            }
+        });
 
-            // Party Name Resolution
+        // Add B/F Row
+        resultRows.push({
+            id: 'opening',
+            date: startDate ? startDate.toISOString() : (currentLedger?.createdAt || new Date().toISOString()),
+            partyName: 'Opening Balance (B/F)',
+            typeLabel: '',
+            voucherNumber: '',
+            debit: balanceBroughtForward > 0 ? balanceBroughtForward : 0,
+            credit: balanceBroughtForward < 0 ? Math.abs(balanceBroughtForward) : 0,
+            balance: balanceBroughtForward,
+            isOpening: true
+        });
+
+        // Process Display Transactions
+        let currentRunBalance = balanceBroughtForward;
+        
+        displayTxns.forEach(txn => {
+            currentRunBalance += txn.netChange;
+            
+            // Resolve Party Name
             let partyName = '-';
+            const isDebit = txn.debit > 0;
+            
             if (txn.invoice?.customer) partyName = txn.invoice.customer.name;
             else if (txn.purchaseBill?.vendor) partyName = txn.purchaseBill.vendor.name;
             else if (txn.receipt?.customer) partyName = txn.receipt.customer.name;
             else if (txn.payment?.vendor) partyName = txn.payment.vendor.name;
             else {
-                // Determine the "Other" ledger name
-                if (isDebit) partyName = txn.creditLedger?.name || 'Unknown';
-                if (isCredit) partyName = txn.debitLedger?.name || 'Unknown';
+                 if (isDebit) partyName = txn.creditLedger?.name || 'Unknown';
+                 else partyName = txn.debitLedger?.name || 'Unknown';
             }
 
-            // Transaction Type & Ref
-            let typeLabel = txn.voucherType;
-            let refNo = txn.voucherNumber;
+            // Type Label
+             let typeLabel = txn.voucherType;
+             let refNo = txn.voucherNumber;
+ 
+             if (txn.invoice) { typeLabel = 'Invoice'; refNo = txn.invoice.invoiceNumber; }
+             else if (txn.purchaseBill) { typeLabel = 'Bill'; refNo = txn.purchaseBill.billNumber; }
+             else if (txn.receipt) { typeLabel = 'Receipt'; refNo = txn.receipt.receiptNumber; }
+             else if (txn.payment) { typeLabel = 'Payment'; refNo = txn.payment.paymentNumber; }
 
-            if (txn.invoice) { typeLabel = 'Invoice'; refNo = txn.invoice.invoiceNumber; }
-            else if (txn.purchaseBill) { typeLabel = 'Bill'; refNo = txn.purchaseBill.billNumber; }
-            else if (txn.receipt) { typeLabel = 'Receipt'; refNo = txn.receipt.receiptNumber; }
-            else if (txn.payment) { typeLabel = 'Payment'; refNo = txn.payment.paymentNumber; }
-
-            return {
+            resultRows.push({
                 ...txn,
-                debit,
-                credit,
-                balance: runningBalance,
                 partyName,
                 typeLabel,
-                refNo
-            };
+                refNo,
+                balance: currentRunBalance
+            });
         });
 
-        // 3. Filter by Date Range for Display
-        return withBalance.filter(txn => {
-            const txnDate = new Date(txn.date);
-            const start = dateRange.startDate ? new Date(dateRange.startDate) : null;
-            const end = dateRange.endDate ? new Date(dateRange.endDate) : null;
-
-            if (start && txnDate < start) return false;
-            // Set end date to end of day to include transactions on that day
-            if (end) {
-                end.setHours(23, 59, 59, 999);
-                if (txnDate > end) return false;
-            }
-            return true;
-        });
-    }, [transactions, selectedAccount, dateRange]);
+        return resultRows;
+    }, [ledgers, transactions, selectedAccount, dateRange]);
 
     const currentLedgerName = ledgers.find(l => l.id == selectedAccount)?.name || '';
 
